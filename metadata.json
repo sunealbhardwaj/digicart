@@ -1,0 +1,6 @@
+{
+  "name": "ApexDigital - Digital Assets & Creator Mega Marketplace",
+  "description": "High-converting digital products marketplace for creator bundles, templates, graphic assets, software tools, and marketing resources with instant cloud delivery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
