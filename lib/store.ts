@@ -1,10 +1,11 @@
 'use client';
 
-import { Product, Coupon, StoreSettings, Order, Currency } from './types';
+import { Product, Coupon, StoreSettings, Order, Currency, DEFAULT_CATEGORIES } from './types';
 import { INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS, INITIAL_ORDERS, SAMPLE_IMAGE_PRESETS } from './initialData';
 
 const STORAGE_KEYS = {
   PRODUCTS: 'apex_products_v2',
+  CATEGORIES: 'apex_categories_v2',
   COUPONS: 'apex_coupons_v1',
   SETTINGS: 'apex_settings_v1',
   ORDERS: 'apex_orders_v1',
@@ -58,6 +59,78 @@ export const saveStoredProducts = (products: Product[]) => {
   } catch (err) {
     console.error('Failed to save products:', err);
   }
+};
+
+// Category storage helpers
+export const getStoredCategories = (): string[] => {
+  if (typeof window === 'undefined') return [...DEFAULT_CATEGORIES];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    let cats: string[] = [];
+    if (raw) {
+      cats = JSON.parse(raw);
+    } else {
+      cats = [...DEFAULT_CATEGORIES];
+    }
+    // Also include any categories from existing products to prevent orphaned items
+    try {
+      const prodRaw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+      if (prodRaw) {
+        const prods: Product[] = JSON.parse(prodRaw);
+        prods.forEach((p) => {
+          if (p.category && !cats.includes(p.category)) {
+            cats.push(p.category);
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+    // Save reconciled categories
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
+    }
+    return cats;
+  } catch (err) {
+    console.error('Failed to read categories:', err);
+    return [...DEFAULT_CATEGORIES];
+  }
+};
+
+export const saveStoredCategories = (categories: string[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    window.dispatchEvent(new Event('apex_categories_updated'));
+  } catch (err) {
+    console.error('Failed to save categories:', err);
+  }
+};
+
+export const addStoredCategory = (categoryName: string): { success: boolean; message: string; category?: string } => {
+  const trimmed = categoryName.trim();
+  if (!trimmed || trimmed.length < 2) {
+    return { success: false, message: 'Category name must be at least 2 characters.' };
+  }
+  const current = getStoredCategories();
+  const normalized = trimmed.toUpperCase();
+  const existing = current.find((c) => c.toUpperCase() === normalized);
+  if (existing) {
+    return { success: false, message: `Category "${existing}" already exists.`, category: existing };
+  }
+  const updated = [...current, trimmed];
+  saveStoredCategories(updated);
+  return { success: true, message: `Category "${trimmed}" created successfully!`, category: trimmed };
+};
+
+export const deleteStoredCategory = (categoryName: string): { success: boolean; message: string } => {
+  const current = getStoredCategories();
+  if (current.length <= 1) {
+    return { success: false, message: 'At least one category must remain.' };
+  }
+  const updated = current.filter((c) => c !== categoryName);
+  saveStoredCategories(updated);
+  return { success: true, message: `Category "${categoryName}" removed.` };
 };
 
 export const getStoredCoupons = (): Coupon[] => {

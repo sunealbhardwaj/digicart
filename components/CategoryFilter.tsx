@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ProductCategory } from '@/lib/types';
+import { ProductCategory, DEFAULT_CATEGORIES } from '@/lib/types';
 import {
   Sparkles,
   Layers,
@@ -11,28 +11,23 @@ import {
   Video,
   BookOpen,
   LayoutGrid,
+  Folder,
 } from 'lucide-react';
 
-export const ALL_CATEGORIES: ProductCategory[] = [
-  'CONTENT CREATION & MEDIA ASSETS',
-  'GRAPHIC DESIGN & CREATIVE TEMPLATES',
-  'BUSINESS & DIGITAL MARKETING RESOURCES',
-  'EMAIL MARKETING MEGA BUNDLE',
-  'SOFTWARE, WORDPRESS & DEVELOPMENT TOOLS',
-  'VIDEO & AUDIO PRODUCTION BUNDLE',
-  'COURSES & EDUCATIONAL RESOURCES',
-];
+export const ALL_CATEGORIES: string[] = [...DEFAULT_CATEGORIES];
 
 interface CategoryFilterProps {
-  selectedCategory: string; // 'ALL' or a ProductCategory
+  selectedCategory: string; // 'ALL' or a category
   onSelectCategory: (cat: string) => void;
   counts: Record<string, number>;
+  categories?: string[];
 }
 
 export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   selectedCategory,
   onSelectCategory,
   counts,
+  categories = ALL_CATEGORIES,
 }) => {
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
@@ -88,8 +83,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
           </span>
         </button>
 
-        {/* 7 Requested Core Categories */}
-        {ALL_CATEGORIES.map((cat) => {
+        {/* Categories Pills */}
+        {categories.map((cat) => {
           const isSelected = selectedCategory === cat;
           const count = counts[cat] || 0;
 

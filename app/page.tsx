@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Product, Currency, CartItem, Coupon, Order, StoreSettings } from '@/lib/types';
 import {
   getStoredProducts,
+  getStoredCategories,
   getStoredCoupons,
   getStoredSettings,
   addStoredOrder,
@@ -24,6 +25,7 @@ import { Sparkles, Search, SlidersHorizontal, Star, ShieldCheck } from 'lucide-r
 
 export default function StorefrontPage() {
   const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
+  const [categories, setCategories] = useState<string[]>(() => getStoredCategories());
   const [coupons, setCoupons] = useState<Coupon[]>(() => getStoredCoupons());
   const [settings, setSettings] = useState<StoreSettings | null>(() => getStoredSettings());
 
@@ -58,16 +60,19 @@ export default function StorefrontPage() {
   useEffect(() => {
     const handleUpdate = () => {
       setProducts(getStoredProducts());
+      setCategories(getStoredCategories());
       setCoupons(getStoredCoupons());
       setSettings(getStoredSettings());
     };
 
     window.addEventListener('apex_products_updated', handleUpdate);
+    window.addEventListener('apex_categories_updated', handleUpdate);
     window.addEventListener('apex_coupons_updated', handleUpdate);
     window.addEventListener('apex_settings_updated', handleUpdate);
 
     return () => {
       window.removeEventListener('apex_products_updated', handleUpdate);
+      window.removeEventListener('apex_categories_updated', handleUpdate);
       window.removeEventListener('apex_coupons_updated', handleUpdate);
       window.removeEventListener('apex_settings_updated', handleUpdate);
     };
@@ -219,6 +224,7 @@ export default function StorefrontPage() {
               setSearchQuery('');
             }}
             counts={categoryCounts}
+            categories={categories}
           />
         </div>
 
@@ -371,7 +377,7 @@ export default function StorefrontPage() {
       <FaqSection />
 
       {/* 8. Footer (Strictly ZERO admin links or buttons) */}
-      <Footer onSelectCategory={(cat) => setSelectedCategory(cat)} />
+      <Footer onSelectCategory={(cat) => setSelectedCategory(cat)} categories={categories} />
 
       {/* Modals & Drawers */}
       <ProductDetailModal

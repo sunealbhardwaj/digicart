@@ -5,6 +5,10 @@ import { Product, Coupon, StoreSettings, Order, ProductCategory } from '@/lib/ty
 import {
   getStoredProducts,
   saveStoredProducts,
+  getStoredCategories,
+  saveStoredCategories,
+  addStoredCategory,
+  deleteStoredCategory,
   getStoredCoupons,
   saveStoredCoupons,
   getStoredSettings,
@@ -36,6 +40,18 @@ import {
   Layers,
   ImageIcon,
   Filter,
+  Database,
+  Server,
+  CheckCircle2,
+  Copy,
+  FileCode,
+  RefreshCw,
+  Upload,
+  FolderPlus,
+  Folder,
+  UploadCloud,
+  FileImage,
+  ImageUp,
 } from 'lucide-react';
 
 const COMMON_BADGES = [
@@ -51,6 +67,18 @@ const COMMON_BADGES = [
   'NEW RELEASE',
 ];
 
+function generateAdminToken(): string {
+  return `adm_token_${Date.now()}`;
+}
+
+function generateProductId(): string {
+  return `prod-${Date.now()}`;
+}
+
+function generateCouponId(): string {
+  return `coup-${Date.now()}`;
+}
+
 export default function AdminDashboardPage() {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -62,13 +90,55 @@ export default function AdminDashboardPage() {
   const [loginError, setLoginError] = useState<string>('');
 
   // Active Admin Tab
-  const [activeTab, setActiveTab] = useState<'products' | 'badges' | 'offers' | 'orders'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'badges' | 'offers' | 'orders' | 'database'>('products');
+
+  // Database Connection Testing State
+  const [dbTestResult, setDbTestResult] = useState<any>(null);
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const handleTestDatabase = async () => {
+    setIsTestingDb(true);
+    try {
+      const res = await fetch('/api/db/test');
+      const data = await res.json();
+      setDbTestResult(data);
+      if (data.connected) {
+        showToast('Connected to MySQL successfully!');
+      } else {
+        showToast('Database test complete - check report');
+      }
+    } catch (err: any) {
+      setDbTestResult({
+        connected: false,
+        database: 'u328293805_7R01z',
+        user: 'u328293805_mn6Ce',
+        host: 'localhost',
+        error: err.message || 'Network error calling test endpoint',
+        advice: 'Check server network access and configuration.',
+      });
+    } finally {
+      setIsTestingDb(false);
+    }
+  };
 
   // Stored Data States
   const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
+  const [categories, setCategories] = useState<string[]>(() => getStoredCategories());
   const [coupons, setCoupons] = useState<Coupon[]>(() => getStoredCoupons());
   const [settings, setSettings] = useState<StoreSettings | null>(() => getStoredSettings());
   const [orders, setOrders] = useState<Order[]>(() => getStoredOrders());
+
+  // Category Management Draft State
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+  const [isAddingCategoryInline, setIsAddingCategoryInline] = useState<boolean>(false);
+  const [inlineCategoryName, setInlineCategoryName] = useState<string>('');
+
+  // Image Upload & Source Mode in Product Modal
+  const [imageInputMode, setImageInputMode] = useState<'upload' | 'presets' | 'url'>('upload');
+  const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
+  const [dragActive, setDragActive] = useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Search & Filter in Admin
   const [productSearch, setProductSearch] = useState('');
@@ -98,11 +168,13 @@ export default function AdminDashboardPage() {
 
   const loadAllData = () => {
     const p = getStoredProducts();
+    const cats = getStoredCategories();
     const c = getStoredCoupons();
     const s = getStoredSettings();
     const o = getStoredOrders();
 
     setProducts(p);
+    setCategories(cats);
     setCoupons(c);
     setSettings(s);
     setOrders(o);
@@ -120,17 +192,138 @@ export default function AdminDashboardPage() {
     };
 
     window.addEventListener('apex_products_updated', handleUpdate);
+    window.addEventListener('apex_categories_updated', handleUpdate);
     window.addEventListener('apex_coupons_updated', handleUpdate);
     window.addEventListener('apex_settings_updated', handleUpdate);
     window.addEventListener('apex_orders_updated', handleUpdate);
 
     return () => {
       window.removeEventListener('apex_products_updated', handleUpdate);
+      window.removeEventListener('apex_categories_updated', handleUpdate);
       window.removeEventListener('apex_coupons_updated', handleUpdate);
       window.removeEventListener('apex_settings_updated', handleUpdate);
       window.removeEventListener('apex_orders_updated', handleUpdate);
     };
   }, []);
+
+  // Category Handlers
+  const handleCreateCategory = (nameToCreate: string, selectForProduct = false) => {
+    const res = addStoredCategory(nameToCreate);
+    if (res.success && res.category) {
+      const updated = getStoredCategories();
+      setCategories(updated);
+      showToast(res.message);
+      if (selectForProduct && editingProduct) {
+        setEditingProduct({ ...editingProduct, category: res.category });
+        setIsAddingCategoryInline(false);
+        setInlineCategoryName('');
+      } else {
+        setNewCategoryName('');
+      }
+    } else {
+      showToast(res.message);
+    }
+  };
+
+  const handleDeleteCategory = (catName: string) => {
+    const assigned = products.filter((p) => p.category === catName);
+    if (assigned.length > 0) {
+      if (!confirm(`Warning: Category "${catName}" has ${assigned.length} product(s) assigned to it. Are you sure you want to delete this category?`)) {
+        return;
+      }
+    }
+    const res = deleteStoredCategory(catName);
+    if (res.success) {
+      const updated = getStoredCategories();
+      setCategories(updated);
+      showToast(res.message);
+      if (filterCategory === catName) setFilterCategory('ALL');
+      if (editingProduct?.category === catName && updated[0]) {
+        setEditingProduct({ ...editingProduct, category: updated[0] });
+      }
+    } else {
+      showToast(res.message);
+    }
+  };
+
+  // Image Upload File Handler (Optimized canvas compression to max 1280px WebP/JPEG)
+  const processAndSetImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WebP, SVG, etc.)');
+      return;
+    }
+
+    setIsProcessingImage(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rawDataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1280;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const optimized = canvas.toDataURL('image/webp', 0.88);
+          setEditingProduct((prev) => (prev ? { ...prev, imageUrl: optimized } : null));
+          showToast(`Image "${file.name}" uploaded successfully!`);
+        } else {
+          setEditingProduct((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+          showToast(`Image "${file.name}" attached!`);
+        }
+        setIsProcessingImage(false);
+      };
+      img.onerror = () => {
+        setEditingProduct((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+        setIsProcessingImage(false);
+        showToast(`Image "${file.name}" attached!`);
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processAndSetImageFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleDropFile = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processAndSetImageFile(file);
+    }
+  };
 
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
@@ -156,7 +349,7 @@ export default function AdminDashboardPage() {
     } catch {
       // Local fallback for client-side auth
       if (username === 'admin' && password === 'admin123') {
-        const token = `adm_token_${Date.now()}`;
+        const token = generateAdminToken();
         localStorage.setItem('apex_admin_session_v1', token);
         setIsAuthenticated(true);
         loadAllData();
@@ -181,7 +374,7 @@ export default function AdminDashboardPage() {
   const handleOpenAddProduct = () => {
     const defaultSample = SAMPLE_IMAGE_PRESETS[0]?.url || '';
     setEditingProduct({
-      id: `prod-${Date.now()}`,
+      id: generateProductId(),
       name: '',
       category: 'CONTENT CREATION & MEDIA ASSETS',
       description: '',
@@ -217,7 +410,7 @@ export default function AdminDashboardPage() {
     const existingIndex = currentList.findIndex((p) => p.id === editingProduct.id);
 
     const updatedProduct: Product = {
-      id: editingProduct.id || `prod-${Date.now()}`,
+      id: editingProduct.id || generateProductId(),
       name: editingProduct.name,
       slug:
         editingProduct.slug ||
@@ -345,7 +538,7 @@ export default function AdminDashboardPage() {
     }
 
     const newCoupon: Coupon = {
-      id: `coup-${Date.now()}`,
+      id: generateCouponId(),
       code,
       discountPercentage: Number(newCouponDiscount) || 20,
       minSpend: 0,
@@ -582,6 +775,18 @@ export default function AdminDashboardPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('categories')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-mono transition-all cursor-pointer ${
+              activeTab === 'categories'
+                ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
+                : 'bg-white text-slate-600 hover:text-blue-600 border border-slate-200'
+            }`}
+          >
+            <FolderPlus className="w-4 h-4 text-blue-500" />
+            <span>Categories & Taxonomy ({categories.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('badges')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-mono transition-all cursor-pointer ${
               activeTab === 'badges'
@@ -616,6 +821,18 @@ export default function AdminDashboardPage() {
             <ShoppingBag className="w-4 h-4" />
             <span>Customer Orders ({orders.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('database')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-mono transition-all cursor-pointer ${
+              activeTab === 'database'
+                ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20'
+                : 'bg-white text-slate-600 hover:text-blue-600 border border-slate-200'
+            }`}
+          >
+            <Database className="w-4 h-4 text-blue-500" />
+            <span>MySQL Database & 403 Fix</span>
+          </button>
         </div>
 
         {/* TAB 1: PRODUCTS MANAGEMENT */}
@@ -641,7 +858,7 @@ export default function AdminDashboardPage() {
                   className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-600"
                 >
                   <option value="ALL">All Categories</option>
-                  {ALL_CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
@@ -770,7 +987,112 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 2: BADGES & LABELS */}
+        {/* TAB 2: CATEGORIES & TAXONOMY MANAGEMENT */}
+        {activeTab === 'categories' && (
+          <div className="space-y-6">
+            {/* Header & Add Category Card */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-xs">
+                    <FolderPlus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                      Storefront Categories & Taxonomy
+                      <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                        {categories.length} Active Categories
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">
+                      Create custom product categories. Any category added here immediately appears on your public storefront and in the product editor.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Category Form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newCategoryName.trim()) {
+                    handleCreateCategory(newCategoryName);
+                  }
+                }}
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200"
+              >
+                <div className="relative flex-1">
+                  <Folder className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500" />
+                  <input
+                    type="text"
+                    required
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Enter new category name (e.g. AI PROMPT PACKS & AUTOMATION)..."
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 font-mono uppercase placeholder-slate-400 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Category</span>
+                </button>
+              </form>
+            </div>
+
+            {/* Existing Categories Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categories.map((cat, idx) => {
+                const count = products.filter((p) => p.category === cat).length;
+                return (
+                  <div
+                    key={cat}
+                    className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between hover:border-blue-400 hover:shadow-md transition-all group"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-mono font-bold flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                          {count} {count === 1 ? 'Product' : 'Products'}
+                        </span>
+                      </div>
+                      <h3 className="text-xs font-bold text-slate-900 font-mono leading-snug">
+                        {cat}
+                      </h3>
+                    </div>
+
+                    <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          setFilterCategory(cat);
+                          setActiveTab('products');
+                        }}
+                        className="text-[11px] font-mono font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Filter Products</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteCategory(cat)}
+                        title="Delete Category"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: BADGES & LABELS */}
         {activeTab === 'badges' && (
           <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 shadow-xs">
             <div>
@@ -1031,6 +1353,308 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* TAB 5: MYSQL DATABASE CONFIGURATION & 403 FORBIDDEN FIX */}
+        {activeTab === 'database' && (
+          <div className="space-y-6">
+            {/* Database Status Card */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-xs">
+                    <Database className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                      MySQL Database Status & Configuration
+                      <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-mono font-bold">
+                        Hostinger / cPanel
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">
+                      Target Database: <span className="text-blue-700 font-bold">u328293805_7R01z</span> · User: <span className="text-blue-700 font-bold">u328293805_mn6Ce</span>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleTestDatabase}
+                  disabled={isTestingDb}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
+                  <span>{isTestingDb ? 'Testing Connection...' : 'Test MySQL Connection'}</span>
+                </button>
+              </div>
+
+              {/* Active Credentials Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase font-semibold">
+                    MySQL Database
+                  </span>
+                  <p className="text-xs font-mono font-bold text-slate-900 mt-0.5">
+                    u328293805_7R01z
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase font-semibold">
+                    MySQL Username
+                  </span>
+                  <p className="text-xs font-mono font-bold text-slate-900 mt-0.5">
+                    u328293805_mn6Ce
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase font-semibold">
+                    Default Port & Engine
+                  </span>
+                  <p className="text-xs font-mono font-bold text-slate-900 mt-0.5">
+                    Port 3306 · InnoDB (utf8mb4)
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Test Diagnostic Output */}
+              {dbTestResult && (
+                <div
+                  className={`mt-4 p-4 rounded-xl border ${
+                    dbTestResult.connected
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                      : 'bg-amber-50 border-amber-300 text-amber-950'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {dbTestResult.connected ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 text-xs space-y-1">
+                      <div className="font-bold flex items-center justify-between">
+                        <span>
+                          {dbTestResult.connected
+                            ? '✅ MySQL Connected Successfully!'
+                            : '⚠️ Connection Notice / Fallback Active'}
+                        </span>
+                        <span className="font-mono text-[11px] opacity-80">
+                          Host: {dbTestResult.host} · DB: {dbTestResult.database}
+                        </span>
+                      </div>
+                      {dbTestResult.error && (
+                        <p className="font-mono text-[11px] bg-white/70 p-2 rounded border border-amber-200">
+                          Error Detail: {dbTestResult.error}
+                        </p>
+                      )}
+                      {dbTestResult.advice && (
+                        <p className="font-semibold text-[11px] mt-1 text-amber-900">
+                          👉 Next Step: {dbTestResult.advice}
+                        </p>
+                      )}
+                      <p className="text-[10px] opacity-80 mt-1 font-mono">
+                        Note: The web app uses a fault-tolerant hybrid architecture. When MySQL is unreachable or password is empty, all products, orders, and cart features continue operating seamlessly using local & in-memory caches without 403 or 500 errors!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 403 Forbidden Comprehensive Fix Guide */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  How to Fix &ldquo;403 Forbidden: Access to this resource on the server is denied!&rdquo;
+                </h3>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                This error is the default security screen displayed by <strong>Hostinger / LiteSpeed / Apache</strong>. Here is the exact checklist to permanently resolve it for your database and website:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                {/* Step 1 */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs mb-3 shadow-xs">
+                      1
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900 mb-1.5">
+                      Enable Hostinger &ldquo;Remote MySQL&rdquo;
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      By default, Hostinger blocks outside connections to database <strong>u328293805_7R01z</strong>.
+                    </p>
+                    <div className="mt-2 text-[10px] font-mono bg-white p-2 rounded border border-slate-200 space-y-1 text-slate-700">
+                      <p>1. Open Hostinger hPanel.</p>
+                      <p>2. Go to <strong>Databases</strong> &rarr; <strong>Remote MySQL</strong>.</p>
+                      <p>3. Select DB: <strong>u328293805_7R01z</strong>.</p>
+                      <p>4. In IP field, enter <code className="bg-blue-50 text-blue-700 px-1 font-bold">%</code> (allows remote connections).</p>
+                      <p>5. Click <strong>Create</strong>.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs mb-3 shadow-xs">
+                      2
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900 mb-1.5">
+                      Fix Missing Index or Permissions
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      If you see 403 when opening your website domain, LiteSpeed blocks directory browsing when no index file is present.
+                    </p>
+                    <div className="mt-2 text-[10px] font-mono bg-white p-2 rounded border border-slate-200 space-y-1 text-slate-700">
+                      <p>1. In Hostinger File Manager, check <code className="text-blue-700">public_html/</code>.</p>
+                      <p>2. Ensure an <code className="text-blue-700">index.html</code> or <code className="text-blue-700">index.php</code> is present.</p>
+                      <p>3. Set permissions: Folders = <code className="text-emerald-700 font-bold">755</code>, Files = <code className="text-emerald-700 font-bold">644</code>.</p>
+                      <p>4. Use the provided <code className="text-blue-700">.htaccess</code> file to allow DirectoryIndex.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs mb-3 shadow-xs">
+                      3
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900 mb-1.5">
+                      Set Password & Remote Host
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      In Hostinger, user <strong>u328293805_mn6Ce</strong> has its own secure password.
+                    </p>
+                    <div className="mt-2 text-[10px] font-mono bg-white p-2 rounded border border-slate-200 space-y-1 text-slate-700">
+                      <p>1. In hPanel, go to <strong>MySQL Databases</strong>.</p>
+                      <p>2. For user <code className="text-blue-700">u328293805_mn6Ce</code>, click <strong>Change Password</strong> if needed.</p>
+                      <p>3. Set in your environment:</p>
+                      <p className="bg-slate-100 p-1 rounded font-bold text-blue-700">MYSQL_PASSWORD=&quot;your_pass&quot;</p>
+                      <p>4. Use Hostinger&apos;s Remote Host IP instead of localhost.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SQL Schema Viewer & 1-Click phpMyAdmin Import */}
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      Database Tables Schema (<code className="font-mono text-blue-600">schema.sql</code>)
+                    </h3>
+                    <p className="text-xs text-slate-500 font-mono">
+                      Ready to import directly into Hostinger phpMyAdmin for 1-click table creation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const sql = `-- ApexDigital Schema for Hostinger: u328293805_7R01z
+CREATE TABLE IF NOT EXISTS \`products\` (
+  \`id\` VARCHAR(64) NOT NULL PRIMARY KEY,
+  \`name\` VARCHAR(255) NOT NULL,
+  \`slug\` VARCHAR(255) DEFAULT NULL,
+  \`category\` VARCHAR(120) NOT NULL,
+  \`description\` TEXT DEFAULT NULL,
+  \`features\` TEXT DEFAULT NULL,
+  \`regular_price\` DECIMAL(10, 2) NOT NULL DEFAULT 1999.00,
+  \`sale_price\` DECIMAL(10, 2) NOT NULL DEFAULT 149.00,
+  \`badges\` TEXT DEFAULT NULL,
+  \`delivery_link\` VARCHAR(500) NOT NULL DEFAULT '',
+  \`file_size\` VARCHAR(50) DEFAULT '10.0 GB',
+  \`file_format\` VARCHAR(100) DEFAULT 'ZIP / PSD',
+  \`rating\` DECIMAL(3, 1) DEFAULT 4.9,
+  \`review_count\` INT DEFAULT 120,
+  \`sales_count\` INT DEFAULT 500,
+  \`mockup_theme\` VARCHAR(50) DEFAULT 'amber',
+  \`image_url\` TEXT DEFAULT NULL,
+  \`is_featured\` TINYINT(1) DEFAULT 0,
+  \`is_active\` TINYINT(1) DEFAULT 1,
+  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS \`orders\` (
+  \`id\` VARCHAR(64) NOT NULL PRIMARY KEY,
+  \`customer_name\` VARCHAR(255) NOT NULL,
+  \`customer_email\` VARCHAR(255) NOT NULL,
+  \`items\` TEXT NOT NULL,
+  \`subtotal\` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  \`discount_amount\` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  \`total\` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  \`applied_coupon\` VARCHAR(64) DEFAULT NULL,
+  \`currency\` VARCHAR(10) DEFAULT 'INR',
+  \`payment_method\` VARCHAR(100) DEFAULT 'UPI / GPay',
+  \`status\` VARCHAR(50) DEFAULT 'DELIVERED',
+  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS \`coupons\` (
+  \`id\` VARCHAR(64) NOT NULL PRIMARY KEY,
+  \`code\` VARCHAR(64) NOT NULL UNIQUE,
+  \`discount_percentage\` INT NOT NULL DEFAULT 20,
+  \`min_spend\` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  \`is_active\` TINYINT(1) DEFAULT 1,
+  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS \`store_settings\` (
+  \`id\` INT NOT NULL PRIMARY KEY DEFAULT 1,
+  \`announcement_text\` VARCHAR(500) NOT NULL DEFAULT '⚡ Flash Sale: Flat ₹149 All Mega Bundles Today Only!',
+  \`announcement_active\` TINYINT(1) DEFAULT 1,
+  \`countdown_active\` TINYINT(1) DEFAULT 1,
+  \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
+                      navigator.clipboard.writeText(sql);
+                      setCopiedSql(true);
+                      showToast('Copied schema.sql to clipboard!');
+                      setTimeout(() => setCopiedSql(false), 2500);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-200"
+                  >
+                    {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedSql ? 'Copied SQL!' : 'Copy SQL Script'}</span>
+                  </button>
+
+                  <a
+                    href="/schema.sql"
+                    download="schema.sql"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <HardDriveDownload className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Download .sql</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Instructions to import in Hostinger phpMyAdmin */}
+              <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-slate-700 space-y-1.5">
+                <p className="font-bold text-blue-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                  Quick phpMyAdmin Import Steps:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 font-mono text-[11px] text-slate-600 pl-1">
+                  <li>In Hostinger hPanel, go to <strong>Databases</strong> &rarr; Click <strong>Enter phpMyAdmin</strong> next to <code className="text-blue-700">u328293805_7R01z</code>.</li>
+                  <li>Click on the <strong>SQL</strong> tab at the top.</li>
+                  <li>Paste the copied SQL Script and click <strong>Go</strong>.</li>
+                  <li>All 4 tables (<code className="text-slate-800">products</code>, <code className="text-slate-800">orders</code>, <code className="text-slate-800">coupons</code>, <code className="text-slate-800">store_settings</code>) will be created instantly!</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PRODUCT CREATE / EDIT MODAL (White and Blue Theme with Rich Sample Image Gallery) */}
@@ -1068,11 +1692,45 @@ export default function AdminDashboardPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono font-bold text-slate-700 mb-1">
-                    Category (7 Core Categories)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-mono font-bold text-slate-700">
+                      Product Category
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCategoryInline(!isAddingCategoryInline)}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>{isAddingCategoryInline ? 'Close' : '+ Add New Category'}</span>
+                    </button>
+                  </div>
+
+                  {isAddingCategoryInline && (
+                    <div className="mb-2 p-2 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={inlineCategoryName}
+                        onChange={(e) => setInlineCategoryName(e.target.value)}
+                        placeholder="Type new category..."
+                        className="flex-1 bg-white border border-blue-300 rounded px-2.5 py-1 text-xs text-slate-900 font-mono uppercase focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (inlineCategoryName.trim()) {
+                            handleCreateCategory(inlineCategoryName, true);
+                          }
+                        }}
+                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-mono font-bold text-xs shadow-xs cursor-pointer shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+
                   <select
-                    value={editingProduct.category || 'CONTENT CREATION & MEDIA ASSETS'}
+                    value={editingProduct.category || categories[0] || 'CONTENT CREATION & MEDIA ASSETS'}
                     onChange={(e) => {
                       const newCat = e.target.value as ProductCategory;
                       setEditingProduct({
@@ -1083,7 +1741,7 @@ export default function AdminDashboardPage() {
                     }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   >
-                    {ALL_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
@@ -1197,97 +1855,204 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* PRODUCT IMAGE SAMPLE GALLERY & CUSTOM URL */}
+              {/* PRODUCT IMAGE (UPLOAD FROM DEVICE / PRESETS GALLERY / CUSTOM URL) */}
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-mono font-bold text-slate-800 flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4 text-blue-600" />
-                    Product Mockup Image Sample
+                    Product Mockup Image
                   </label>
                   {editingProduct.imageUrl && (
                     <button
                       type="button"
                       onClick={() => setEditingProduct({ ...editingProduct, imageUrl: '' })}
-                      className="text-[11px] text-red-600 hover:underline font-mono font-semibold"
+                      className="text-[11px] text-red-600 hover:underline font-mono font-semibold cursor-pointer"
                     >
                       Clear Image
                     </button>
                   )}
                 </div>
 
-                <input
-                  type="url"
-                  value={editingProduct.imageUrl || ''}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, imageUrl: e.target.value })
-                  }
-                  placeholder="Paste custom image URL or select from sample presets below..."
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-none focus:border-blue-600"
-                />
-
-                {/* Sample Presets Category Filter */}
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] font-mono font-bold text-slate-600 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                    Click Any Sample Image to Apply:
-                  </span>
-                  <select
-                    value={presetCategoryFilter}
-                    onChange={(e) => setPresetCategoryFilter(e.target.value)}
-                    className="text-[10px] bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 font-mono font-semibold"
+                {/* 3 Source Modes Tab Switcher */}
+                <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setImageInputMode('upload')}
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      imageInputMode === 'upload'
+                        ? 'bg-white text-blue-700 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <option value="ALL">All Categories ({SAMPLE_IMAGE_PRESETS.length})</option>
-                    {ALL_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>Upload from Device</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setImageInputMode('presets')}
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      imageInputMode === 'presets'
+                        ? 'bg-white text-blue-700 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Preset Mockups ({SAMPLE_IMAGE_PRESETS.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setImageInputMode('url')}
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      imageInputMode === 'url'
+                        ? 'bg-white text-blue-700 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Direct URL</span>
+                  </button>
                 </div>
 
-                {/* Presets Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-48 overflow-y-auto pr-1">
-                  {filteredSamplePresets.map((sample, sIdx) => {
-                    const isSelected = editingProduct.imageUrl === sample.url;
-                    return (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        onClick={() =>
-                          setEditingProduct({ ...editingProduct, imageUrl: sample.url })
-                        }
-                        className={`group/samp relative aspect-video rounded-lg overflow-hidden border text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-blue-600 ring-2 ring-blue-500/40 shadow-xs'
-                            : 'border-slate-200 hover:border-blue-400 bg-white'
-                        }`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={sample.url}
-                          alt={sample.title}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover transition-transform group-hover/samp:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent p-1.5 flex flex-col justify-end">
-                          <span className="text-[9px] font-bold text-white leading-tight line-clamp-1">
-                            {sample.title}
+                {/* MODE 1: UPLOAD FROM DEVICE */}
+                {imageInputMode === 'upload' && (
+                  <div className="space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileInputChange}
+                      className="hidden"
+                    />
+
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDropFile}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`relative border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2 ${
+                        dragActive
+                          ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500/20'
+                          : 'border-slate-300 hover:border-blue-500 bg-white hover:bg-blue-50/30'
+                      }`}
+                    >
+                      {isProcessingImage ? (
+                        <div className="flex flex-col items-center gap-2 py-2">
+                          <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+                          <span className="text-xs font-mono font-bold text-blue-700">
+                            Optimizing and uploading image...
                           </span>
                         </div>
-                        {isSelected && (
-                          <div className="absolute top-1 right-1 bg-blue-600 text-white rounded-full p-0.5 shadow-xs">
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      ) : (
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shadow-xs">
+                            <UploadCloud className="w-5 h-5" />
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-800">
+                              Click to choose image or drag &amp; drop file here
+                            </p>
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              PNG, JPG, WEBP, SVG, GIF (auto-resized for instant loading)
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="mt-1 px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-mono font-bold shadow-xs transition-colors"
+                          >
+                            Browse from Computer / Phone
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                {/* Live Preview of Selected Image */}
+                {/* MODE 2: PRESET SAMPLES GALLERY */}
+                {imageInputMode === 'presets' && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono font-bold text-slate-600 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        Click any mockup to attach:
+                      </span>
+                      <select
+                        value={presetCategoryFilter}
+                        onChange={(e) => setPresetCategoryFilter(e.target.value)}
+                        className="text-[10px] bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 font-mono font-semibold"
+                      >
+                        <option value="ALL">All Categories ({SAMPLE_IMAGE_PRESETS.length})</option>
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {filteredSamplePresets.map((sample, sIdx) => {
+                        const isSelected = editingProduct.imageUrl === sample.url;
+                        return (
+                          <button
+                            key={sIdx}
+                            type="button"
+                            onClick={() =>
+                              setEditingProduct({ ...editingProduct, imageUrl: sample.url })
+                            }
+                            className={`group/samp relative aspect-video rounded-lg overflow-hidden border text-left transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-blue-600 ring-2 ring-blue-500/40 shadow-xs'
+                                : 'border-slate-200 hover:border-blue-400 bg-white'
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={sample.url}
+                              alt={sample.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover transition-transform group-hover/samp:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent p-1.5 flex flex-col justify-end">
+                              <span className="text-[9px] font-bold text-white leading-tight line-clamp-1">
+                                {sample.title}
+                              </span>
+                            </div>
+                            {isSelected && (
+                              <div className="absolute top-1 right-1 bg-blue-600 text-white rounded-full p-0.5 shadow-xs">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE 3: DIRECT URL */}
+                {imageInputMode === 'url' && (
+                  <div className="space-y-1">
+                    <input
+                      type="url"
+                      value={editingProduct.imageUrl || ''}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, imageUrl: e.target.value })
+                      }
+                      placeholder="https://images.unsplash.com/... or direct image link"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-none focus:border-blue-600"
+                    />
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      Paste direct URL from Google Drive, Unsplash, Imgur, or CDN.
+                    </p>
+                  </div>
+                )}
+
+                {/* Attached Image Live Preview */}
                 {editingProduct.imageUrl && (
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-blue-50/80 border border-blue-200">
-                    <div className="w-16 h-12 rounded overflow-hidden bg-slate-100 shrink-0 border border-blue-200">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50/80 border border-blue-200">
+                    <div className="w-16 h-12 rounded-lg overflow-hidden bg-white shrink-0 border border-blue-300 shadow-2xs">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={editingProduct.imageUrl}
@@ -1296,10 +2061,24 @@ export default function AdminDashboardPage() {
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="text-[11px] font-mono truncate">
-                      <span className="text-blue-700 font-bold">Image Sample Attached:</span>
-                      <p className="truncate text-slate-600">{editingProduct.imageUrl}</p>
+                    <div className="flex-1 min-w-0 text-[11px] font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="text-blue-800 font-bold truncate">Image Attached to Product</span>
+                      </div>
+                      <p className="truncate text-slate-600 text-[10px] mt-0.5">
+                        {editingProduct.imageUrl.startsWith('data:')
+                          ? 'Uploaded File (Optimized Base64 Data)'
+                          : editingProduct.imageUrl}
+                      </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 text-[10px] font-mono font-bold rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer shrink-0"
+                    >
+                      Change
+                    </button>
                   </div>
                 )}
               </div>

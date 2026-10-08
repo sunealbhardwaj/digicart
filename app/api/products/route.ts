@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { INITIAL_PRODUCTS } from '@/lib/initialData';
 import { Product } from '@/lib/types';
+import { getDbProducts, saveDbProduct, deleteDbProduct } from '@/lib/db';
 
-// In-memory cache for server-side responses
+// In-memory fallback cache
 let serverProducts: Product[] = [...INITIAL_PRODUCTS];
 
 export async function GET(req: NextRequest) {
@@ -10,7 +11,18 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category');
   const search = searchParams.get('search')?.toLowerCase();
 
-  let filtered = serverProducts.filter((p) => p.isActive);
+  let productsList = serverProducts;
+  try {
+    const dbItems = await getDbProducts();
+    if (dbItems && dbItems.length > 0) {
+      productsList = dbItems;
+      serverProducts = dbItems;
+    }
+  } catch (err) {
+    console.warn('Falling back to memory cache for products:', err);
+  }
+
+  let filtered = productsList.filter((p) => p.isActive);
 
   if (category && category !== 'ALL') {
     filtered = filtered.filter((p) => p.category === category);
@@ -34,12 +46,23 @@ export async function POST(req: NextRequest) {
     const newProduct: Product = {
       ...body,
       id: body.id || `prod-${Date.now()}`,
-      slug: body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      slug:
+        body.slug ||
+        body.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, ''),
       updatedAt: new Date().toISOString(),
       isActive: body.isActive !== undefined ? body.isActive : true,
     };
 
     serverProducts = [newProduct, ...serverProducts];
+
+    // Try saving to MySQL
+    saveDbProduct(newProduct).catch((err) =>
+      console.warn('Async MySQL product insert skipped:', err)
+    );
+
     return NextResponse.json({ success: true, product: newProduct });
   } catch {
     return NextResponse.json({ success: false, error: 'Invalid product data' }, { status: 400 });
@@ -53,8 +76,18 @@ export async function PUT(req: NextRequest) {
     if (index === -1) {
       serverProducts.push(body);
     } else {
-      serverProducts[index] = { ...serverProducts[index], ...body, updatedAt: new Date().toISOString() };
+      serverProducts[index] = {
+        ...serverProducts[index],
+        ...body,
+        updatedAt: new Date().toISOString(),
+      };
     }
+
+    // Try saving to MySQL
+    saveDbProduct(body).catch((err) =>
+      console.warn('Async MySQL product update skipped:', err)
+    );
+
     return NextResponse.json({ success: true, product: body });
   } catch {
     return NextResponse.json({ success: false, error: 'Update failed' }, { status: 400 });
@@ -67,6 +100,13 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ success: false, error: 'Product ID required' }, { status: 400 });
   }
+
   serverProducts = serverProducts.filter((p) => p.id !== id);
+
+  // Try deleting from MySQL
+  deleteDbProduct(id).catch((err) =>
+    console.warn('Async MySQL product delete skipped:', err)
+  );
+
   return NextResponse.json({ success: true, message: 'Product deleted' });
 }

@@ -6,9 +6,10 @@ import { ALL_CATEGORIES } from './CategoryFilter';
 
 interface FooterProps {
   onSelectCategory: (cat: string) => void;
+  categories?: string[];
 }
 
-export const Footer: React.FC<FooterProps> = ({ onSelectCategory }) => {
+export const Footer: React.FC<FooterProps> = ({ onSelectCategory, categories = ALL_CATEGORIES }) => {
   return (
     <footer className="bg-white border-t border-slate-200 pt-12 pb-10 text-slate-600 text-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -38,7 +39,7 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory }) => {
               Asset Collections
             </h4>
             <ul className="space-y-1.5">
-              {ALL_CATEGORIES.slice(0, 4).map((cat) => (
+              {categories.slice(0, 4).map((cat) => (
                 <li key={cat}>
                   <button
                     onClick={() => {
@@ -60,7 +61,7 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory }) => {
               Specialized Tools
             </h4>
             <ul className="space-y-1.5">
-              {ALL_CATEGORIES.slice(4).map((cat) => (
+              {categories.slice(4).map((cat) => (
                 <li key={cat}>
                   <button
                     onClick={() => {

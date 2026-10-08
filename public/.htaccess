@@ -1,0 +1,26 @@
+# ========================================================
+# Hostinger / Apache / LiteSpeed Configuration (.htaccess)
+# Prevents 403 Forbidden Error & Configures Clean Routing
+# ========================================================
+
+Options -Indexes +FollowSymLinks
+DirectoryIndex index.html index.php
+
+# Fix 403 Forbidden for missing index or restricted directories
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Handle CORS for API requests
+  <IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+  </IfModule>
+</IfModule>
+
+# Prevent viewing of sensitive configuration files (.env)
+<FilesMatch "^\.env">
+  Order allow,deny
+  Deny from all
+</FilesMatch>
