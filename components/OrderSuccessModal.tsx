@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Order } from '@/lib/types';
 import { formatPrice } from '@/lib/store';
 import {
@@ -22,6 +22,27 @@ interface OrderSuccessModalProps {
 export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Close on Escape key press
+  useEffect(() => {
+    if (!order) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [order, onClose]);
+
+  // Lock background body scroll
+  useEffect(() => {
+    if (order) {
+      const original = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = original;
+      };
+    }
+  }, [order]);
+
   if (!order) return null;
 
   const handleCopyLink = (link: string, id: string) => {
@@ -31,8 +52,16 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200"
+      >
         {/* Top Celebration Bar */}
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 p-6 text-center text-white relative">
           <button
