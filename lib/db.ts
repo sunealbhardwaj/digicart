@@ -138,9 +138,29 @@ export async function ensureTablesExist(): Promise<boolean> {
           \`announcement_text\` VARCHAR(500) NOT NULL DEFAULT '⚡ Flash Sale: Flat ₹149 All Mega Bundles Today Only!',
           \`announcement_active\` TINYINT(1) DEFAULT 1,
           \`countdown_active\` TINYINT(1) DEFAULT 1,
+          \`maintenance_mode\` TINYINT(1) DEFAULT 1,
+          \`maintenance_message\` TEXT DEFAULT NULL,
+          \`maintenance_estimated_end_time\` VARCHAR(255) DEFAULT NULL,
           \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
+
+      // Ensure maintenance mode columns exist on existing store_settings table
+      try {
+        await conn.query('ALTER TABLE `store_settings` ADD COLUMN `maintenance_mode` TINYINT(1) DEFAULT 1');
+      } catch {
+        // column already exists
+      }
+      try {
+        await conn.query('ALTER TABLE `store_settings` ADD COLUMN `maintenance_message` TEXT DEFAULT NULL');
+      } catch {
+        // column already exists
+      }
+      try {
+        await conn.query('ALTER TABLE `store_settings` ADD COLUMN `maintenance_estimated_end_time` VARCHAR(255) DEFAULT NULL');
+      } catch {
+        // column already exists
+      }
 
       // Ensure meta_keywords column exists on existing products table
       try {
@@ -530,6 +550,9 @@ export async function getDbSettings(): Promise<StoreSettings | null> {
       announcementText: r.announcement_text,
       announcementActive: Boolean(r.announcement_active),
       countdownActive: Boolean(r.countdown_active),
+      maintenanceMode: r.maintenance_mode !== undefined && r.maintenance_mode !== null ? Boolean(r.maintenance_mode) : true,
+      maintenanceMessage: r.maintenance_message || INITIAL_SETTINGS.maintenanceMessage,
+      maintenanceEstimatedEndTime: r.maintenance_estimated_end_time || INITIAL_SETTINGS.maintenanceEstimatedEndTime,
     };
   } catch {
     return null;
@@ -544,16 +567,22 @@ export async function saveDbSettings(settings: StoreSettings): Promise<boolean> 
   try {
     await ensureTablesExist();
     await p.query(
-      `INSERT INTO \`store_settings\` (id, announcement_text, announcement_active, countdown_active)
-       VALUES (1, ?, ?, ?)
+      `INSERT INTO \`store_settings\` (id, announcement_text, announcement_active, countdown_active, maintenance_mode, maintenance_message, maintenance_estimated_end_time)
+       VALUES (1, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          announcement_text = VALUES(announcement_text),
          announcement_active = VALUES(announcement_active),
-         countdown_active = VALUES(countdown_active)`,
+         countdown_active = VALUES(countdown_active),
+         maintenance_mode = VALUES(maintenance_mode),
+         maintenance_message = VALUES(maintenance_message),
+         maintenance_estimated_end_time = VALUES(maintenance_estimated_end_time)`,
       [
         settings.announcementText,
         settings.announcementActive ? 1 : 0,
         settings.countdownActive ? 1 : 0,
+        settings.maintenanceMode ? 1 : 0,
+        settings.maintenanceMessage || null,
+        settings.maintenanceEstimatedEndTime || null,
       ]
     );
     return true;

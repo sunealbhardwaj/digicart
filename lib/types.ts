@@ -145,6 +145,9 @@ export interface StoreSettings {
     USD: number;
     EUR: number;
   };
+  maintenanceMode: boolean;
+  maintenanceMessage?: string;
+  maintenanceEstimatedEndTime?: string;
 }
 
 export interface CartItem {

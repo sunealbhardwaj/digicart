@@ -58,6 +58,11 @@ import {
   Monitor,
   Star,
   MoreVertical,
+  Wrench,
+  Power,
+  AlertTriangle,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 
 const COMMON_BADGES = [
@@ -209,6 +214,15 @@ export default function AdminDashboardPage() {
   const [bannerActive, setBannerActive] = useState(INITIAL_SETTINGS.announcementActive);
   const [countdownActive, setCountdownActive] = useState(INITIAL_SETTINGS.countdownActive);
 
+  // Store Maintenance Mode state
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(INITIAL_SETTINGS.maintenanceMode ?? true);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>(
+    INITIAL_SETTINGS.maintenanceMessage || ''
+  );
+  const [maintenanceEstimatedEndTime, setMaintenanceEstimatedEndTime] = useState<string>(
+    INITIAL_SETTINGS.maintenanceEstimatedEndTime || '~25 minutes'
+  );
+
   useEffect(() => {
     const syncAdminData = () => {
       setIsMounted(true);
@@ -222,6 +236,11 @@ export default function AdminDashboardPage() {
       setBannerText(currentSettings.announcementText);
       setBannerActive(currentSettings.announcementActive);
       setCountdownActive(currentSettings.countdownActive);
+      setMaintenanceMode(currentSettings.maintenanceMode ?? true);
+      setMaintenanceMessage(currentSettings.maintenanceMessage || INITIAL_SETTINGS.maintenanceMessage || '');
+      setMaintenanceEstimatedEndTime(
+        currentSettings.maintenanceEstimatedEndTime || INITIAL_SETTINGS.maintenanceEstimatedEndTime || '~25 minutes'
+      );
       setOrders(getStoredOrders());
     };
 
@@ -661,6 +680,53 @@ export default function AdminDashboardPage() {
   };
 
   // ----------------------------------------------------
+  // STORE MAINTENANCE MODE HANDLERS
+  // ----------------------------------------------------
+  const handleToggleMaintenanceMode = (targetState?: boolean) => {
+    const current = getStoredSettings();
+    const nextVal = typeof targetState === 'boolean' ? targetState : !maintenanceMode;
+    const updated: StoreSettings = {
+      ...current,
+      maintenanceMode: nextVal,
+      maintenanceMessage: maintenanceMessage,
+      maintenanceEstimatedEndTime: maintenanceEstimatedEndTime,
+    };
+    saveStoredSettings(updated);
+    setSettings(updated);
+    setMaintenanceMode(nextVal);
+    showToast(
+      nextVal
+        ? 'Store Maintenance Mode has been ENABLED! Public visitors now see the maintenance page.'
+        : 'Store Maintenance Mode has been DISABLED! Storefront is live to public.'
+    );
+
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(console.error);
+  };
+
+  const handleSaveMaintenanceSettings = () => {
+    const current = getStoredSettings();
+    const updated: StoreSettings = {
+      ...current,
+      maintenanceMode,
+      maintenanceMessage,
+      maintenanceEstimatedEndTime,
+    };
+    saveStoredSettings(updated);
+    setSettings(updated);
+    showToast('Store maintenance settings saved successfully!');
+
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(console.error);
+  };
+
+  // ----------------------------------------------------
   // ANNOUNCEMENT BAR & OFFERS
   // ----------------------------------------------------
   const handleSaveBanner = () => {
@@ -885,6 +951,77 @@ export default function AdminDashboardPage() {
 
       {/* Main Admin Content */}
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+        {/* Maintenance Mode Status & Quick Action Banner */}
+        <div
+          className={`p-4 rounded-xl border mb-6 transition-all ${
+            maintenanceMode
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-950'
+              : 'bg-slate-50 border-slate-200 text-slate-800'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shrink-0 ${
+                  maintenanceMode
+                    ? 'bg-amber-500 shadow-md shadow-amber-500/20'
+                    : 'bg-emerald-600 shadow-md shadow-emerald-600/20'
+                }`}
+              >
+                {maintenanceMode ? (
+                  <Wrench className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '6s' }} />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-mono font-bold tracking-tight">
+                    STORE STATUS: {maintenanceMode ? 'MAINTENANCE MODE ACTIVE' : 'LIVE & ACCEPTING ORDERS'}
+                  </h3>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                      maintenanceMode
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}
+                  >
+                    {maintenanceMode ? 'Public Restricted' : 'Storefront Live'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {maintenanceMode
+                    ? 'Public visitors see the scheduled maintenance upgrade screen. You have admin bypass to test products.'
+                    : 'Your marketplace is fully open to all visitors with instant checkout and digital delivery.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => handleToggleMaintenanceMode()}
+                className={`px-3.5 py-2 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                  maintenanceMode
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                <span>{maintenanceMode ? 'Disable Maintenance (Go Live)' : 'Enable Maintenance Mode'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('offers')}
+                className="px-3 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-xs font-mono font-semibold text-slate-700 transition-colors cursor-pointer"
+              >
+                Configure
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Metric Cards Overview */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
@@ -980,8 +1117,8 @@ export default function AdminDashboardPage() {
                 : 'bg-white text-slate-600 hover:text-blue-600 border border-slate-200'
             }`}
           >
-            <Megaphone className="w-4 h-4" />
-            <span>Announcements & Coupons</span>
+            <Wrench className="w-4 h-4 text-amber-500" />
+            <span>Settings, Maintenance & Offers</span>
           </button>
 
           <button
@@ -1378,9 +1515,119 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: OFFERS & ANNOUNCEMENTS */}
+        {/* TAB 3: OFFERS, MAINTENANCE & ANNOUNCEMENTS */}
         {activeTab === 'offers' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Store Maintenance Mode Manager */}
+            <div
+              className={`col-span-1 lg:col-span-2 border rounded-xl p-6 space-y-4 shadow-xs transition-all ${
+                maintenanceMode ? 'bg-amber-50/70 border-amber-300' : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shrink-0 ${
+                      maintenanceMode ? 'bg-amber-500 shadow-md shadow-amber-500/20' : 'bg-slate-800'
+                    }`}
+                  >
+                    <Wrench className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <span>Store Maintenance Mode</span>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                          maintenanceMode
+                            ? 'bg-amber-500 text-slate-950'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}
+                      >
+                        {maintenanceMode ? 'ACTIVE (PUBLIC LOCKED)' : 'DISABLED (STORE LIVE)'}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-600 mt-0.5 font-mono">
+                      Restricts customer storefront access and displays a countdown maintenance screen while you update products, run database migrations, or upgrade servers.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleMaintenanceMode()}
+                    className={`px-4 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+                      maintenanceMode
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    <Power className="w-4 h-4" />
+                    <span>{maintenanceMode ? 'Disable Maintenance (Go Live)' : 'Enable Maintenance Mode'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Maintenance inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-mono font-bold text-slate-700 mb-1">
+                    Custom Maintenance Notice Message
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={maintenanceMessage}
+                    onChange={(e) => setMaintenanceMessage(e.target.value)}
+                    placeholder="e.g. ApexDigital is currently undergoing scheduled infrastructure upgrades. We will be back online shortly!"
+                    className="w-full bg-white border border-slate-300 rounded-lg p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1 font-mono">
+                    Shown to all storefront visitors on the maintenance landing page.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-mono font-bold text-slate-700 mb-1">
+                      Estimated Return Window / Uptime
+                    </label>
+                    <div className="relative">
+                      <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={maintenanceEstimatedEndTime}
+                        onChange={(e) => setMaintenanceEstimatedEndTime(e.target.value)}
+                        placeholder="e.g. ~25 minutes, or 2:00 PM EST"
+                        className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 font-mono">
+                      Displayed on the countdown timer pill.
+                    </p>
+                  </div>
+
+                  <div className="pt-1 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveMaintenanceSettings}
+                      className="flex-1 py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs cursor-pointer font-mono"
+                    >
+                      Save Maintenance Settings
+                    </button>
+                    <a
+                      href="/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs transition-all flex items-center gap-1 font-mono cursor-pointer"
+                    >
+                      <span>Preview</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Top Announcement Bar Manager */}
             <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 shadow-xs">
               <div>

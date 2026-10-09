@@ -217,7 +217,11 @@ export const getStoredSettings = (): StoreSettings => {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
       return INITIAL_SETTINGS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...INITIAL_SETTINGS,
+      ...parsed,
+    };
   } catch {
     return INITIAL_SETTINGS;
   }

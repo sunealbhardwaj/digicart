@@ -23,6 +23,8 @@ import { OrderSuccessModal } from '@/components/OrderSuccessModal';
 import { TrustSection } from '@/components/TrustSection';
 import { FaqSection } from '@/components/FaqSection';
 import { Footer } from '@/components/Footer';
+import { MaintenanceScreen } from '@/components/MaintenanceScreen';
+import { MaintenanceModeBanner } from '@/components/MaintenanceModeBanner';
 import { Sparkles, Search, SlidersHorizontal, Star, ShieldCheck } from 'lucide-react';
 
 export default function StorefrontPage() {
@@ -53,6 +55,9 @@ export default function StorefrontPage() {
   // Notification toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Admin bypass mode during maintenance
+  const [adminBypass, setAdminBypass] = useState(false);
+
   // Hydration-safe initial client synchronization
   useEffect(() => {
     const syncClientData = () => {
@@ -61,6 +66,25 @@ export default function StorefrontPage() {
       setCategories(getStoredCategories());
       setCoupons(getStoredCoupons());
       setSettings(getStoredSettings());
+
+      try {
+        const bypass = sessionStorage.getItem('apex_admin_bypass');
+        if (bypass === 'true') {
+          setAdminBypass(true);
+        }
+      } catch {
+        // ignore
+      }
+
+      // Check server settings
+      fetch('/api/settings')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.settings) {
+            setSettings(data.settings);
+          }
+        })
+        .catch(() => {});
 
       try {
         const savedCart = localStorage.getItem('apex_cart_v1');
@@ -292,8 +316,41 @@ export default function StorefrontPage() {
     });
   }, [products, selectedCategory, searchQuery]);
 
+  // If maintenance mode is active and visitor is not in admin bypass mode
+  if (isMounted && settings?.maintenanceMode && !adminBypass) {
+    return (
+      <MaintenanceScreen
+        settings={settings}
+        onEnableBypass={() => {
+          setAdminBypass(true);
+          try {
+            sessionStorage.setItem('apex_admin_bypass', 'true');
+          } catch {
+            // ignore
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+      {/* Admin Bypass Sticky Warning Banner */}
+      {settings?.maintenanceMode && adminBypass && (
+        <MaintenanceModeBanner
+          settings={settings}
+          onSettingsUpdated={(newSettings) => setSettings(newSettings)}
+          onExitBypass={() => {
+            setAdminBypass(false);
+            try {
+              sessionStorage.removeItem('apex_admin_bypass');
+            } catch {
+              // ignore
+            }
+          }}
+        />
+      )}
+
       {/* 1. Dynamic Top Announcement Bar */}
       {settings && <AnnouncementBar settings={settings} />}
 

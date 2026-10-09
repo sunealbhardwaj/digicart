@@ -1002,6 +1002,9 @@ export const INITIAL_SETTINGS: StoreSettings = {
     USD: 0.012, // ₹100 ~ $1.20
     EUR: 0.011,
   },
+  maintenanceMode: true,
+  maintenanceMessage: 'ApexDigital is currently undergoing scheduled infrastructure upgrades and asset cloud synchronization. Our marketplace will be back online shortly with faster downloads and new bundles.',
+  maintenanceEstimatedEndTime: '~25 minutes',
 };
 
 export const INITIAL_ORDERS: Order[] = [
