@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { INITIAL_ORDERS } from '@/lib/initialData';
 import { Order } from '@/lib/types';
-import { getDbOrders, saveDbOrder } from '@/lib/db';
+import { getDbOrders, saveDbOrder, isDbConfigured } from '@/lib/db';
 
 let serverOrders: Order[] = [...INITIAL_ORDERS];
 
 export async function GET() {
   let ordersList = serverOrders;
-  try {
-    const dbOrders = await getDbOrders();
-    if (dbOrders && dbOrders.length > 0) {
-      ordersList = dbOrders;
-      serverOrders = dbOrders;
+  if (isDbConfigured()) {
+    try {
+      const dbOrders = await getDbOrders();
+      if (dbOrders && dbOrders.length > 0) {
+        ordersList = dbOrders;
+        serverOrders = dbOrders;
+      }
+    } catch {
+      // Gracefully fall back to server cache
     }
-  } catch (err) {
-    console.warn('Falling back to memory cache for orders:', err);
   }
 
   return NextResponse.json({ success: true, count: ordersList.length, orders: ordersList });
@@ -31,10 +33,10 @@ export async function POST(req: NextRequest) {
     };
     serverOrders = [newOrder, ...serverOrders];
 
-    // Try saving to MySQL
-    saveDbOrder(newOrder).catch((err) =>
-      console.warn('Async MySQL order save skipped:', err)
-    );
+    // Try saving to MySQL only if database is configured
+    if (isDbConfigured()) {
+      saveDbOrder(newOrder).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, order: newOrder });
   } catch {

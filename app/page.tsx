@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, Currency, CartItem, Coupon, Order, StoreSettings } from '@/lib/types';
+import { Product, Currency, CartItem, Coupon, Order, StoreSettings, CATEGORY_TAXONOMY, DEFAULT_CATEGORIES } from '@/lib/types';
+import { INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS } from '@/lib/initialData';
 import {
   getStoredProducts,
   getStoredCategories,
@@ -24,10 +25,10 @@ import { Footer } from '@/components/Footer';
 import { Sparkles, Search, SlidersHorizontal, Star, ShieldCheck } from 'lucide-react';
 
 export default function StorefrontPage() {
-  const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
-  const [categories, setCategories] = useState<string[]>(() => getStoredCategories());
-  const [coupons, setCoupons] = useState<Coupon[]>(() => getStoredCoupons());
-  const [settings, setSettings] = useState<StoreSettings | null>(() => getStoredSettings());
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [categories, setCategories] = useState<string[]>([...DEFAULT_CATEGORIES]);
+  const [coupons, setCoupons] = useState<Coupon[]>(INITIAL_COUPONS);
+  const [settings, setSettings] = useState<StoreSettings | null>(INITIAL_SETTINGS);
 
   // Filter & Search states
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -35,15 +36,8 @@ export default function StorefrontPage() {
   const [currency, setCurrency] = useState<Currency>('INR');
 
   // Interactive states
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem('apex_cart_v1');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -57,7 +51,61 @@ export default function StorefrontPage() {
   // Notification toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Hydration-safe initial client synchronization
   useEffect(() => {
+    const syncClientData = () => {
+      setIsMounted(true);
+      setProducts(getStoredProducts());
+      setCategories(getStoredCategories());
+      setCoupons(getStoredCoupons());
+      setSettings(getStoredSettings());
+
+      try {
+        const savedCart = localStorage.getItem('apex_cart_v1');
+        if (savedCart) {
+          setCart(JSON.parse(savedCart));
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        const savedCurrency = localStorage.getItem('apex_currency_v1') as Currency;
+        if (savedCurrency) {
+          setCurrency(savedCurrency);
+        }
+      } catch {
+        // ignore
+      }
+
+      // Read URL query params on mount
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const catParam = searchParams.get('category');
+        const queryParam = searchParams.get('q');
+        const prodParam = searchParams.get('product');
+
+        if (catParam) {
+          setSelectedCategory(catParam);
+        }
+        if (queryParam) {
+          setSearchQuery(queryParam);
+        }
+        if (prodParam) {
+          const prods = getStoredProducts();
+          const match = prods.find((p) => p.id === prodParam || p.slug === prodParam);
+          if (match) {
+            setSelectedProduct(match);
+            setIsDetailOpen(true);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const timer = setTimeout(syncClientData, 0);
+
     const handleUpdate = () => {
       setProducts(getStoredProducts());
       setCategories(getStoredCategories());
@@ -71,6 +119,7 @@ export default function StorefrontPage() {
     window.addEventListener('apex_settings_updated', handleUpdate);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('apex_products_updated', handleUpdate);
       window.removeEventListener('apex_categories_updated', handleUpdate);
       window.removeEventListener('apex_coupons_updated', handleUpdate);
@@ -78,14 +127,25 @@ export default function StorefrontPage() {
     };
   }, []);
 
-  // Save cart to local storage
+  // Save cart to local storage only after mount
   useEffect(() => {
+    if (!isMounted) return;
     try {
       localStorage.setItem('apex_cart_v1', JSON.stringify(cart));
     } catch {
       // ignore
     }
-  }, [cart]);
+  }, [cart, isMounted]);
+
+  // Persist currency selection
+  const handleCurrencyChange = (c: Currency) => {
+    setCurrency(c);
+    try {
+      localStorage.setItem('apex_currency_v1', c);
+    } catch {
+      // ignore
+    }
+  };
 
   // Toast helper
   const showToast = (msg: string) => {
@@ -154,6 +214,28 @@ export default function StorefrontPage() {
         counts['ALL'] = (counts['ALL'] || 0) + 1;
         counts[p.category] = (counts[p.category] || 0) + 1;
       });
+
+    // Special collection counts
+    const activeProducts = products.filter((p) => p.isActive);
+    counts['MEGA BUNDLES'] = activeProducts.filter(
+      (p) => p.category === 'MEGA BUNDLES' || p.badges.includes('MEGA BUNDLE')
+    ).length;
+    counts['NEW ARRIVALS'] = activeProducts.filter(
+      (p) => p.badges.includes('NEW RELEASE') || p.id.includes('tmpl') || p.id.includes('plr')
+    ).length;
+    counts['BEST SELLERS'] = activeProducts.filter(
+      (p) => p.badges.includes('BESTSELLER') || p.salesCount >= 2000
+    ).length;
+
+    // Parent group aggregate counts
+    CATEGORY_TAXONOMY.groups.forEach((g) => {
+      let groupTotal = 0;
+      g.subcategories.forEach((sub) => {
+        groupTotal += counts[sub] || 0;
+      });
+      counts[g.name] = groupTotal;
+    });
+
     return counts;
   }, [products]);
 
@@ -162,9 +244,34 @@ export default function StorefrontPage() {
     return products.filter((p) => {
       if (!p.isActive) return false;
 
-      // Category filter
-      if (selectedCategory !== 'ALL' && p.category !== selectedCategory) {
-        return false;
+      // Category / Collection filter
+      if (selectedCategory !== 'ALL') {
+        if (selectedCategory === 'MEGA BUNDLES') {
+          if (p.category !== 'MEGA BUNDLES' && !p.badges.includes('MEGA BUNDLE')) {
+            return false;
+          }
+        } else if (selectedCategory === 'NEW ARRIVALS') {
+          if (!p.badges.includes('NEW RELEASE') && !p.id.includes('tmpl') && !p.id.includes('plr')) {
+            return false;
+          }
+        } else if (selectedCategory === 'BEST SELLERS') {
+          if (!p.badges.includes('BESTSELLER') && p.salesCount < 2000) {
+            return false;
+          }
+        } else {
+          // Check if selectedCategory is a Parent Taxonomy Group
+          const matchedGroup = CATEGORY_TAXONOMY.groups.find((g) => g.name === selectedCategory);
+          if (matchedGroup) {
+            if (p.category !== selectedCategory && !matchedGroup.subcategories.includes(p.category)) {
+              return false;
+            }
+          } else {
+            // Specific subcategory filter
+            if (p.category !== selectedCategory) {
+              return false;
+            }
+          }
+        }
       }
 
       // Search query filter
@@ -189,14 +296,22 @@ export default function StorefrontPage() {
       {/* 1. Dynamic Top Announcement Bar */}
       {settings && <AnnouncementBar settings={settings} />}
 
-      {/* 2. Sticky Storefront Header */}
+      {/* 2. Sticky Storefront Header with Full Category Navigation */}
       <Navbar
-        cartCount={cart.reduce((total, i) => total + i.quantity, 0)}
+        cartCount={isMounted ? cart.reduce((total, i) => total + i.quantity, 0) : 0}
         onOpenCart={() => setIsCartOpen(true)}
         currency={currency}
-        onCurrencyChange={setCurrency}
+        onCurrencyChange={handleCurrencyChange}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        selectedCategory={selectedCategory}
+        categoryCounts={categoryCounts}
+        onCategorySelect={(cat) => {
+          setSelectedCategory(cat);
+          setSearchQuery('');
+          const el = document.getElementById('catalog-section');
+          el?.scrollIntoView({ behavior: 'smooth' });
+        }}
       />
 
       {/* 3. Hero Section */}
@@ -214,37 +329,37 @@ export default function StorefrontPage() {
       />
 
       {/* 4. Product Catalog Main Section */}
-      <main id="catalog-section" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Category Filter Pills / Tabs */}
-        <div className="mb-8">
-          <CategoryFilter
-            selectedCategory={selectedCategory}
-            onSelectCategory={(cat) => {
-              setSelectedCategory(cat);
-              setSearchQuery('');
-            }}
-            counts={categoryCounts}
-            categories={categories}
-          />
-        </div>
+      <main id="catalog-section" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        {/* Contextual Category Sub-Filter (only shown when category filtered) */}
+        {selectedCategory !== 'ALL' && (
+          <div className="mb-4">
+            <CategoryFilter
+              selectedCategory={selectedCategory}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                setSearchQuery('');
+              }}
+              counts={categoryCounts}
+              categories={categories}
+            />
+          </div>
+        )}
 
-        {/* Section Header with Sort / Filter info */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-200">
+        {/* Section Header with Clean, Compact Typography */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 pb-3 border-b border-slate-200/80">
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>
-                {selectedCategory === 'ALL' ? 'Featured Creator Vaults & Tools' : selectedCategory}
-              </span>
-              <span className="text-xs font-mono font-normal text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200 shadow-xs">
-                {filteredProducts.length} items
-              </span>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              {selectedCategory === 'ALL' ? 'All Digital Assets' : selectedCategory}
             </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Showing {filteredProducts.length} verified {filteredProducts.length === 1 ? 'asset' : 'assets'} ready for instant download
+            </p>
             {searchQuery && (
               <p className="text-xs text-blue-600 font-mono mt-1">
-                Showing results for &ldquo;{searchQuery}&rdquo; —{' '}
+                Filter: &ldquo;{searchQuery}&rdquo; ·{' '}
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="underline hover:text-blue-800 cursor-pointer font-bold"
+                  className="underline hover:text-blue-800 cursor-pointer font-semibold"
                 >
                   Clear search
                 </button>
@@ -252,28 +367,28 @@ export default function StorefrontPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-600 font-mono">
-            <span className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              Verified Cloud Download Links
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
+            <span className="flex items-center gap-1.5 bg-white border border-slate-200/80 px-2.5 py-1 rounded-md text-[11px]">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              Verified Cloud Links
             </span>
           </div>
         </div>
 
         {/* Products Grid */}
         {filteredProducts.length === 0 ? (
-          <div className="text-center py-16 px-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
-            <Search className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-slate-800">No assets match your search</h3>
+          <div className="text-center py-16 px-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+            <Search className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <h3 className="text-sm font-bold text-slate-800">No assets match your search</h3>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Try exploring all categories or clearing your keyword filter to view available vaults.
+              Try clearing your search query or selecting a different category from the navigation bar.
             </p>
             <button
               onClick={() => {
                 setSelectedCategory('ALL');
                 setSearchQuery('');
               }}
-              className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors cursor-pointer shadow-xs"
+              className="mt-4 px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Reset Filters
             </button>
@@ -295,14 +410,14 @@ export default function StorefrontPage() {
       </main>
 
       {/* 5. Customer Reviews / Social Proof Showcase */}
-      <section className="py-14 border-t border-b border-slate-200 bg-white">
+      <section className="py-10 sm:py-12 border-t border-b border-slate-200/80 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs font-mono font-bold uppercase text-blue-600 tracking-wider">
-              Real Verified Reviews
-            </span>
-            <h2 className="text-2xl font-extrabold text-slate-900 mt-1">
-              Loved by Top Content Creators & Agencies
+          <div className="text-center max-w-2xl mx-auto mb-8">
+            <div className="text-xs font-mono font-medium uppercase tracking-wider text-slate-500 mb-1">
+              Verified Feedback
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Trusted by 14,000+ Creators & Developers
             </h2>
           </div>
 

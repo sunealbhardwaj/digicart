@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { INITIAL_PRODUCTS } from '@/lib/initialData';
 import { Product } from '@/lib/types';
-import { getDbProducts, saveDbProduct, deleteDbProduct } from '@/lib/db';
+import { getDbProducts, saveDbProduct, deleteDbProduct, isDbConfigured } from '@/lib/db';
 
 // In-memory fallback cache
 let serverProducts: Product[] = [...INITIAL_PRODUCTS];
@@ -12,14 +12,16 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get('search')?.toLowerCase();
 
   let productsList = serverProducts;
-  try {
-    const dbItems = await getDbProducts();
-    if (dbItems && dbItems.length > 0) {
-      productsList = dbItems;
-      serverProducts = dbItems;
+  if (isDbConfigured()) {
+    try {
+      const dbItems = await getDbProducts();
+      if (dbItems && dbItems.length > 0) {
+        productsList = dbItems;
+        serverProducts = dbItems;
+      }
+    } catch {
+      // Gracefully fall back to server cache
     }
-  } catch (err) {
-    console.warn('Falling back to memory cache for products:', err);
   }
 
   let filtered = productsList.filter((p) => p.isActive);
@@ -58,10 +60,10 @@ export async function POST(req: NextRequest) {
 
     serverProducts = [newProduct, ...serverProducts];
 
-    // Try saving to MySQL
-    saveDbProduct(newProduct).catch((err) =>
-      console.warn('Async MySQL product insert skipped:', err)
-    );
+    // Try saving to MySQL only if database is configured
+    if (isDbConfigured()) {
+      saveDbProduct(newProduct).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, product: newProduct });
   } catch {
@@ -83,10 +85,10 @@ export async function PUT(req: NextRequest) {
       };
     }
 
-    // Try saving to MySQL
-    saveDbProduct(body).catch((err) =>
-      console.warn('Async MySQL product update skipped:', err)
-    );
+    // Try saving to MySQL only if database is configured
+    if (isDbConfigured()) {
+      saveDbProduct(body).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, product: body });
   } catch {
@@ -103,10 +105,10 @@ export async function DELETE(req: NextRequest) {
 
   serverProducts = serverProducts.filter((p) => p.id !== id);
 
-  // Try deleting from MySQL
-  deleteDbProduct(id).catch((err) =>
-    console.warn('Async MySQL product delete skipped:', err)
-  );
+  // Try deleting from MySQL only if database is configured
+  if (isDbConfigured()) {
+    deleteDbProduct(id).catch(() => {});
+  }
 
   return NextResponse.json({ success: true, message: 'Product deleted' });
 }

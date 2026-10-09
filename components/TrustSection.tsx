@@ -32,14 +32,14 @@ export const TrustSection: React.FC = () => {
   ];
 
   return (
-    <section className="py-14 border-b border-slate-200 bg-slate-50">
+    <section className="py-10 sm:py-12 border-b border-slate-200/80 bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <span className="text-xs font-mono font-bold uppercase text-blue-600 tracking-wider">
-            Verified Creator Guarantee
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-            Why 14,000+ Creators & Developers Trust Us
+        <div className="text-center max-w-2xl mx-auto mb-8">
+          <div className="text-xs font-mono font-medium uppercase tracking-wider text-slate-500 mb-1">
+            Delivery & Guarantee
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Why Creators & Agencies Trust Us
           </h2>
         </div>
 

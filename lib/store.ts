@@ -4,8 +4,8 @@ import { Product, Coupon, StoreSettings, Order, Currency, DEFAULT_CATEGORIES } f
 import { INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS, INITIAL_ORDERS, SAMPLE_IMAGE_PRESETS } from './initialData';
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'apex_products_v2',
-  CATEGORIES: 'apex_categories_v2',
+  PRODUCTS: 'apex_products_v3',
+  CATEGORIES: 'apex_categories_v3',
   COUPONS: 'apex_coupons_v1',
   SETTINGS: 'apex_settings_v1',
   ORDERS: 'apex_orders_v1',
@@ -14,33 +14,81 @@ const STORAGE_KEYS = {
   ADMIN_AUTH: 'apex_admin_session_v1',
 };
 
+const OLD_CATEGORY_MAPPINGS: Record<string, string> = {
+  'CONTENT CREATION & MEDIA ASSETS': 'Content Creation',
+  'GRAPHIC DESIGN & CREATIVE TEMPLATES': 'Graphic Design',
+  'BUSINESS & DIGITAL MARKETING RESOURCES': 'Business & Marketing',
+  'EMAIL MARKETING MEGA BUNDLE': 'Email Marketing',
+  'SOFTWARE, WORDPRESS & DEVELOPMENT TOOLS': 'Software & WordPress',
+  'VIDEO & AUDIO PRODUCTION BUNDLE': 'Video & Audio',
+  'COURSES & EDUCATIONAL RESOURCES': 'Courses & Education',
+};
+
 // Safe LocalStorage helpers
 export const getStoredProducts = (): Product[] => {
   if (typeof window === 'undefined') return INITIAL_PRODUCTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     if (!raw) {
+      // Check if v2 products exist and migrate
+      const v2Raw = localStorage.getItem('apex_products_v2');
+      if (v2Raw) {
+        try {
+          const v2Products: Product[] = JSON.parse(v2Raw);
+          // Migrate old categories to new
+          const migrated = v2Products.map((p) => ({
+            ...p,
+            category: OLD_CATEGORY_MAPPINGS[p.category] || p.category,
+          }));
+          // Merge with any new initial products not present in v2
+          const existingIds = new Set(migrated.map((p) => p.id));
+          const toAdd = INITIAL_PRODUCTS.filter((init) => !existingIds.has(init.id));
+          const merged = [...migrated, ...toAdd];
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(merged));
+          return merged;
+        } catch {
+          // ignore error
+        }
+      }
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
       return INITIAL_PRODUCTS;
     }
     const parsed: Product[] = JSON.parse(raw);
     let updated = false;
     const enriched = parsed.map((p) => {
+      // Check if old category needs update
+      let cat = p.category;
+      if (OLD_CATEGORY_MAPPINGS[p.category]) {
+        cat = OLD_CATEGORY_MAPPINGS[p.category];
+        updated = true;
+      }
       if (!p.imageUrl) {
         const found = INITIAL_PRODUCTS.find((init) => init.id === p.id);
         if (found?.imageUrl) {
           updated = true;
-          return { ...p, imageUrl: found.imageUrl };
+          return { ...p, category: cat, imageUrl: found.imageUrl };
         }
         const fallbackSample =
-          SAMPLE_IMAGE_PRESETS.find((s) => s.category === p.category) || SAMPLE_IMAGE_PRESETS[0];
+          SAMPLE_IMAGE_PRESETS.find((s) => s.category === cat) || SAMPLE_IMAGE_PRESETS[0];
         if (fallbackSample?.url) {
           updated = true;
-          return { ...p, imageUrl: fallbackSample.url };
+          return { ...p, category: cat, imageUrl: fallbackSample.url };
         }
+      }
+      if (cat !== p.category) {
+        return { ...p, category: cat };
       }
       return p;
     });
+
+    // Make sure new initial products exist
+    const existingIds = new Set(enriched.map((p) => p.id));
+    const missing = INITIAL_PRODUCTS.filter((init) => !existingIds.has(init.id));
+    if (missing.length > 0) {
+      enriched.push(...missing);
+      updated = true;
+    }
+
     if (updated) {
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(enriched));
     }
@@ -69,26 +117,30 @@ export const getStoredCategories = (): string[] => {
     let cats: string[] = [];
     if (raw) {
       cats = JSON.parse(raw);
+      // If cats still contains old categories, replace them with DEFAULT_CATEGORIES
+      const hasOldCategory = cats.some((c) => OLD_CATEGORY_MAPPINGS[c] || c.includes('CONTENT CREATION & MEDIA'));
+      if (hasOldCategory) {
+        cats = [...DEFAULT_CATEGORIES];
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
+      }
     } else {
       cats = [...DEFAULT_CATEGORIES];
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
     }
-    // Also include any categories from existing products to prevent orphaned items
+    // Also include any custom categories from existing products to prevent orphaned items
     try {
       const prodRaw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       if (prodRaw) {
         const prods: Product[] = JSON.parse(prodRaw);
         prods.forEach((p) => {
-          if (p.category && !cats.includes(p.category)) {
-            cats.push(p.category);
+          const cleanCat = OLD_CATEGORY_MAPPINGS[p.category] || p.category;
+          if (cleanCat && !cats.includes(cleanCat)) {
+            cats.push(cleanCat);
           }
         });
       }
     } catch {
       // ignore
-    }
-    // Save reconciled categories
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
     }
     return cats;
   } catch (err) {
@@ -207,6 +259,14 @@ export const addStoredOrder = (order: Order) => {
   }
 };
 
+export const formatINRNumber = (amountINR: number): string => {
+  const str = Math.round(amountINR).toString();
+  if (str.length <= 3) return str;
+  const lastThree = str.substring(str.length - 3);
+  const otherNumbers = str.substring(0, str.length - 3);
+  return otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+};
+
 export const formatPrice = (amountINR: number, currency: Currency): string => {
   if (currency === 'USD') {
     const usd = Math.max(1.99, Number((amountINR * 0.012).toFixed(2)));
@@ -216,7 +276,7 @@ export const formatPrice = (amountINR: number, currency: Currency): string => {
     const eur = Math.max(1.89, Number((amountINR * 0.011).toFixed(2)));
     return `€${eur.toFixed(2)}`;
   }
-  return `₹${amountINR.toLocaleString('en-IN')}`;
+  return `₹${formatINRNumber(amountINR)}`;
 };
 
 export const getCurrencySymbol = (currency: Currency): string => {

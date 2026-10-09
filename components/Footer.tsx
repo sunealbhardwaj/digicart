@@ -36,10 +36,10 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, categories = A
           {/* Categories 1 */}
           <div className="space-y-2">
             <h4 className="text-xs font-mono font-bold uppercase text-slate-900 tracking-wider">
-              Asset Collections
+              Digital Products & AI
             </h4>
             <ul className="space-y-1.5">
-              {categories.slice(0, 4).map((cat) => (
+              {['Content Creation', 'Graphic Design', 'Business & Marketing', 'ChatGPT Prompts', 'AI Tools', 'AI Graphics'].map((cat) => (
                 <li key={cat}>
                   <button
                     onClick={() => {
@@ -58,10 +58,10 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, categories = A
           {/* Categories 2 */}
           <div className="space-y-2">
             <h4 className="text-xs font-mono font-bold uppercase text-slate-900 tracking-wider">
-              Specialized Tools
+              Templates & PLR / MRR
             </h4>
             <ul className="space-y-1.5">
-              {categories.slice(4).map((cat) => (
+              {['Canva', 'Photoshop', 'PowerPoint', 'PLR Articles', 'PLR Ebooks', 'MEGA BUNDLES'].map((cat) => (
                 <li key={cat}>
                   <button
                     onClick={() => {

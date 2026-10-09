@@ -1,11 +1,89 @@
+export interface CategoryGroup {
+  name: string;
+  subcategories: string[];
+}
+
+export const CATEGORY_TAXONOMY: {
+  groups: CategoryGroup[];
+  specialCollections: string[];
+} = {
+  groups: [
+    {
+      name: 'DIGITAL PRODUCTS',
+      subcategories: [
+        'Content Creation',
+        'Graphic Design',
+        'Business & Marketing',
+        'Email Marketing',
+        'Software & WordPress',
+        'Video & Audio',
+        'Courses & Education',
+      ],
+    },
+    {
+      name: 'AI RESOURCES',
+      subcategories: [
+        'ChatGPT Prompts',
+        'AI Tools',
+        'AI Content',
+        'AI Graphics',
+      ],
+    },
+    {
+      name: 'TEMPLATES',
+      subcategories: [
+        'Canva',
+        'Photoshop',
+        'PowerPoint',
+        'Excel',
+        'WordPress',
+        'Social Media',
+      ],
+    },
+    {
+      name: 'PLR / MRR',
+      subcategories: [
+        'PLR Articles',
+        'PLR Ebooks',
+        'PLR Templates',
+        'Resell Products',
+        'Business Resources',
+      ],
+    },
+  ],
+  specialCollections: ['MEGA BUNDLES', 'NEW ARRIVALS', 'BEST SELLERS'],
+};
+
+// Flattened list of default product categories
 export const DEFAULT_CATEGORIES = [
-  'CONTENT CREATION & MEDIA ASSETS',
-  'GRAPHIC DESIGN & CREATIVE TEMPLATES',
-  'BUSINESS & DIGITAL MARKETING RESOURCES',
-  'EMAIL MARKETING MEGA BUNDLE',
-  'SOFTWARE, WORDPRESS & DEVELOPMENT TOOLS',
-  'VIDEO & AUDIO PRODUCTION BUNDLE',
-  'COURSES & EDUCATIONAL RESOURCES',
+  // DIGITAL PRODUCTS
+  'Content Creation',
+  'Graphic Design',
+  'Business & Marketing',
+  'Email Marketing',
+  'Software & WordPress',
+  'Video & Audio',
+  'Courses & Education',
+  // AI RESOURCES
+  'ChatGPT Prompts',
+  'AI Tools',
+  'AI Content',
+  'AI Graphics',
+  // TEMPLATES
+  'Canva',
+  'Photoshop',
+  'PowerPoint',
+  'Excel',
+  'WordPress',
+  'Social Media',
+  // PLR / MRR
+  'PLR Articles',
+  'PLR Ebooks',
+  'PLR Templates',
+  'Resell Products',
+  'Business Resources',
+  // SPECIAL
+  'MEGA BUNDLES',
 ] as const;
 
 export type ProductCategory = string;

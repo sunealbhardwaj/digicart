@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { Product, Currency } from '@/lib/types';
 import { formatPrice } from '@/lib/store';
 import { ProductMockupGraphic } from './ProductMockupGraphic';
@@ -94,11 +95,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Title */}
-          <h3
-            onClick={() => onViewDetails(product)}
-            className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors cursor-pointer line-clamp-2 leading-snug"
-          >
-            {product.name}
+          <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
+            <Link
+              href={`/product/${product.slug || product.id}`}
+              onClick={(e) => {
+                // If normal left-click without modifier keys, open modal for fast preview
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onViewDetails(product);
+                }
+              }}
+              className="hover:underline cursor-pointer"
+            >
+              {product.name}
+            </Link>
           </h3>
 
           {/* Short description */}

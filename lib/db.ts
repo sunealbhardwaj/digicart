@@ -31,16 +31,37 @@ export function getDbConfig() {
   };
 }
 
+/**
+ * Determine if MySQL is properly configured with an external/remote host and password.
+ * When running in cloud containers without a local MySQL server or without a password,
+ * we gracefully return false so we don't attempt connecting to 127.0.0.1:3306 (which yields ECONNREFUSED).
+ */
+export function isDbConfigured(): boolean {
+  const host = process.env.MYSQL_HOST;
+  const password = process.env.MYSQL_PASSWORD;
+
+  // If host is absent, or points to localhost/127.0.0.1 in cloud environment,
+  // or password is empty, MySQL is not available.
+  if (!host || host === 'localhost' || host === '127.0.0.1') {
+    return false;
+  }
+  if (!password || password.trim() === '') {
+    return false;
+  }
+  return true;
+}
+
 export function getPool(): Pool | null {
+  if (!isDbConfigured()) {
+    return null;
+  }
   if (pool) return pool;
 
   const config = getDbConfig();
-  // If no password or host is localhost in a remote cloud container, we can still attempt or gracefully degrade
   try {
     pool = mysql.createPool(config);
     return pool;
-  } catch (err: any) {
-    console.warn('MySQL pool initialization error:', err.message);
+  } catch {
     return null;
   }
 }
@@ -48,6 +69,7 @@ export function getPool(): Pool | null {
 // Auto-create required tables if not already present
 export async function ensureTablesExist(): Promise<boolean> {
   if (tablesInitialized) return true;
+  if (!isDbConfigured()) return false;
 
   const p = getPool();
   if (!p) return false;
@@ -165,7 +187,7 @@ export async function ensureTablesExist(): Promise<boolean> {
       }
 
       // Check coupons
-      const [couponRows]: [any[], any] = await conn.query('SELECT COUNT(*) as cnt FROM \`coupons\`');
+      const [couponRows]: [any[], any] = await conn.query('SELECT COUNT(*) as cnt FROM `coupons`');
       if (couponRows && couponRows[0] && couponRows[0].cnt === 0) {
         for (const coup of INITIAL_COUPONS) {
           await conn.query(
@@ -181,8 +203,7 @@ export async function ensureTablesExist(): Promise<boolean> {
     } finally {
       conn.release();
     }
-  } catch (err: any) {
-    console.warn('MySQL table initialization skipped/failed:', err.message);
+  } catch {
     return false;
   }
 }
@@ -190,8 +211,26 @@ export async function ensureTablesExist(): Promise<boolean> {
 // Diagnostic connection test
 export async function testDbConnection(): Promise<DbStatus> {
   const config = getDbConfig();
-  const p = getPool();
 
+  if (!isDbConfigured()) {
+    const reason = !config.password
+      ? 'MYSQL_PASSWORD is not configured.'
+      : `MYSQL_HOST is currently '${config.host}' (localhost). External MySQL requires a remote host IP or domain.`;
+
+    return {
+      connected: false,
+      database: config.database,
+      user: config.user,
+      host: config.host,
+      port: config.port,
+      tablesReady: false,
+      error: `Remote MySQL not configured (${reason})`,
+      advice:
+        'Store is running seamlessly with high-speed in-memory & local storage persistence. To connect Hostinger MySQL, set MYSQL_HOST (Remote MySQL IP/domain) and MYSQL_PASSWORD in environment settings.',
+    };
+  }
+
+  const p = getPool();
   if (!p) {
     return {
       connected: false,
@@ -201,7 +240,7 @@ export async function testDbConnection(): Promise<DbStatus> {
       port: config.port,
       tablesReady: false,
       error: 'Could not create connection pool.',
-      advice: 'Ensure MySQL credentials are set in .env.local or environment settings.',
+      advice: 'Verify MySQL connection credentials.',
     };
   }
 
@@ -222,11 +261,11 @@ export async function testDbConnection(): Promise<DbStatus> {
       conn.release();
     }
   } catch (err: any) {
-    let advice = 'Check that your MySQL server is running and accessible.';
+    let advice = 'Check that your remote MySQL server is running and accessible.';
     if (err.code === 'ER_ACCESS_DENIED_ERROR') {
       advice = `Password or user '${config.user}' is incorrect for database '${config.database}'. In Hostinger hPanel, verify MySQL User password.`;
     } else if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
-      advice = `Hostinger / Remote MySQL firewall is blocking connections to '${config.host}'. Go to Hostinger hPanel -> Databases -> Remote MySQL and add '%' (or server IP) to the allowlist, and use Hostinger's Remote MySQL Host IP instead of 'localhost'.`;
+      advice = `Hostinger / Remote MySQL firewall is blocking connections to '${config.host}'. In Hostinger hPanel -> Databases -> Remote MySQL, allow '%' or this server IP.`;
     } else if (err.code === 'ER_BAD_DB_ERROR') {
       advice = `Database '${config.database}' was not found. Please verify the database exists in your hosting panel.`;
     }
@@ -246,6 +285,7 @@ export async function testDbConnection(): Promise<DbStatus> {
 
 // Fetch products from MySQL
 export async function getDbProducts(): Promise<Product[] | null> {
+  if (!isDbConfigured()) return null;
   const p = getPool();
   if (!p) return null;
 
@@ -293,14 +333,14 @@ export async function getDbProducts(): Promise<Product[] | null> {
         updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
       };
     });
-  } catch (err: any) {
-    console.warn('MySQL getProducts error, falling back:', err.message);
+  } catch {
     return null;
   }
 }
 
 // Save or Update Product in MySQL
 export async function saveDbProduct(product: Product): Promise<boolean> {
+  if (!isDbConfigured()) return false;
   const p = getPool();
   if (!p) return false;
 
@@ -354,28 +394,28 @@ export async function saveDbProduct(product: Product): Promise<boolean> {
       ]
     );
     return true;
-  } catch (err: any) {
-    console.warn('MySQL saveProduct error:', err.message);
+  } catch {
     return false;
   }
 }
 
 // Delete Product in MySQL
 export async function deleteDbProduct(productId: string): Promise<boolean> {
+  if (!isDbConfigured()) return false;
   const p = getPool();
   if (!p) return false;
 
   try {
     await p.query('DELETE FROM `products` WHERE `id` = ?', [productId]);
     return true;
-  } catch (err: any) {
-    console.warn('MySQL deleteProduct error:', err.message);
+  } catch {
     return false;
   }
 }
 
 // Orders in MySQL
 export async function getDbOrders(): Promise<Order[] | null> {
+  if (!isDbConfigured()) return null;
   const p = getPool();
   if (!p) return null;
 
@@ -414,6 +454,7 @@ export async function getDbOrders(): Promise<Order[] | null> {
 }
 
 export async function saveDbOrder(order: Order): Promise<boolean> {
+  if (!isDbConfigured()) return false;
   const p = getPool();
   if (!p) return false;
 
@@ -439,14 +480,14 @@ export async function saveDbOrder(order: Order): Promise<boolean> {
       ]
     );
     return true;
-  } catch (err: any) {
-    console.warn('MySQL saveOrder error:', err.message);
+  } catch {
     return false;
   }
 }
 
 // Settings in MySQL
 export async function getDbSettings(): Promise<StoreSettings | null> {
+  if (!isDbConfigured()) return null;
   const p = getPool();
   if (!p) return null;
 
@@ -470,6 +511,7 @@ export async function getDbSettings(): Promise<StoreSettings | null> {
 }
 
 export async function saveDbSettings(settings: StoreSettings): Promise<boolean> {
+  if (!isDbConfigured()) return false;
   const p = getPool();
   if (!p) return false;
 

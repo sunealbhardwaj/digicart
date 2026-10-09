@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Zap, X, Clock } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 import { StoreSettings } from '@/lib/types';
 
 interface AnnouncementBarProps {
@@ -38,19 +38,18 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({ settings }) =>
   const pad = (n: number) => n.toString().padStart(2, '0');
 
   return (
-    <div className="relative z-50 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white font-medium text-xs sm:text-sm py-2 px-4 shadow-sm">
+    <div className="relative z-50 bg-slate-950 text-slate-200 text-xs py-1.5 px-4 border-b border-slate-800">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         <div className="flex-1 flex items-center justify-center gap-2 text-center flex-wrap">
-          <span className="flex items-center gap-1.5 font-bold tracking-tight">
-            <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
+          <span className="font-medium tracking-tight text-slate-100">
             {settings.announcementText}
           </span>
 
           {settings.countdownActive && (
-            <div className="inline-flex items-center gap-1.5 bg-white/20 text-white px-2 py-0.5 rounded font-mono text-xs font-semibold backdrop-blur-xs">
-              <Clock className="w-3 h-3" />
+            <div className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-400">
+              <Clock className="w-3 h-3 text-slate-400" />
               <span>Ends in</span>
-              <span className="tabular-nums font-bold">
+              <span className="tabular-nums font-semibold text-slate-200" suppressHydrationWarning>
                 {pad(timeLeft.hours)}:{pad(timeLeft.minutes)}:{pad(timeLeft.seconds)}
               </span>
             </div>
@@ -59,8 +58,8 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({ settings }) =>
 
         <button
           onClick={() => setVisible(false)}
-          className="text-white/80 hover:text-white transition-colors p-1 rounded hover:bg-white/10 shrink-0"
-          aria-label="Close Announcement"
+          className="text-slate-400 hover:text-slate-200 transition-colors p-0.5 rounded cursor-pointer shrink-0"
+          aria-label="Dismiss Announcement"
         >
           <X className="w-3.5 h-3.5" />
         </button>

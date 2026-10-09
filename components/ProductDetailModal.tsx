@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Link from 'next/link';
 import { Product, Currency } from '@/lib/types';
 import { formatPrice } from '@/lib/store';
+import { buildProductTitle, buildProductDescription } from '@/lib/seo';
 import { ProductMockupGraphic } from './ProductMockupGraphic';
 import {
   X,
@@ -13,6 +15,7 @@ import {
   ShoppingCart,
   Star,
   Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 
 interface ProductDetailModalProps {
@@ -32,6 +35,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
   onBuyNow,
 }) => {
+  // Dynamically update page title & meta description while modal is open
+  useEffect(() => {
+    if (!isOpen || !product) return;
+    const prevTitle = document.title;
+    const metaDescTag = document.querySelector('meta[name="description"]');
+    const prevMetaDesc = metaDescTag ? metaDescTag.getAttribute('content') : '';
+
+    document.title = buildProductTitle(product);
+    if (metaDescTag) {
+      metaDescTag.setAttribute('content', buildProductDescription(product));
+    }
+
+    return () => {
+      document.title = prevTitle;
+      if (metaDescTag && prevMetaDesc) {
+        metaDescTag.setAttribute('content', prevMetaDesc);
+      }
+    };
+  }, [isOpen, product]);
+
   // Close on Escape key press
   useEffect(() => {
     if (!isOpen) return;
@@ -84,15 +107,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <span className="hidden sm:inline text-xs text-slate-400 font-mono">• Product Details</span>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 hover:bg-rose-600 active:scale-95 text-white font-bold text-xs transition-colors shadow-md cursor-pointer shrink-0"
-            aria-label="Close product details dialog"
-          >
-            <X className="w-4 h-4 stroke-[2.5]" />
-            <span>Close</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/product/${product.slug || product.id}`}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[11px] font-bold transition-colors border border-slate-200"
+              title="Open full dedicated product page"
+            >
+              <span>Full Page</span>
+              <ExternalLink className="w-3 h-3 text-slate-500" />
+            </Link>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 hover:bg-rose-600 active:scale-95 text-white font-bold text-xs transition-colors shadow-md cursor-pointer shrink-0"
+              aria-label="Close product details dialog"
+            >
+              <X className="w-4 h-4 stroke-[2.5]" />
+              <span>Close</span>
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Modal Content */}

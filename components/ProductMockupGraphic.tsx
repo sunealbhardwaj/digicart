@@ -12,6 +12,10 @@ import {
   Briefcase,
   HardDriveDownload,
   ImageIcon,
+  Bot,
+  LayoutTemplate,
+  Repeat,
+  Flame,
 } from 'lucide-react';
 import { ProductCategory } from '@/lib/types';
 
@@ -38,20 +42,43 @@ export const ProductMockupGraphic: React.FC<ProductMockupGraphicProps> = ({
   // Category Icon helper
   const renderCategoryIcon = () => {
     switch (category) {
-      case 'CONTENT CREATION & MEDIA ASSETS':
+      case 'Content Creation':
         return <Sparkles className="w-4 h-4 text-blue-600" />;
-      case 'GRAPHIC DESIGN & CREATIVE TEMPLATES':
+      case 'Graphic Design':
         return <Layers className="w-4 h-4 text-indigo-600" />;
-      case 'BUSINESS & DIGITAL MARKETING RESOURCES':
+      case 'Business & Marketing':
         return <Briefcase className="w-4 h-4 text-blue-700" />;
-      case 'EMAIL MARKETING MEGA BUNDLE':
+      case 'Email Marketing':
         return <Mail className="w-4 h-4 text-sky-600" />;
-      case 'SOFTWARE, WORDPRESS & DEVELOPMENT TOOLS':
+      case 'Software & WordPress':
         return <Code2 className="w-4 h-4 text-blue-600" />;
-      case 'VIDEO & AUDIO PRODUCTION BUNDLE':
+      case 'Video & Audio':
         return <Video className="w-4 h-4 text-indigo-700" />;
-      case 'COURSES & EDUCATIONAL RESOURCES':
+      case 'Courses & Education':
         return <BookOpen className="w-4 h-4 text-sky-700" />;
+      case 'ChatGPT Prompts':
+      case 'AI Tools':
+      case 'AI Content':
+      case 'AI Graphics':
+      case 'AI RESOURCES':
+        return <Bot className="w-4 h-4 text-violet-600" />;
+      case 'Canva':
+      case 'Photoshop':
+      case 'PowerPoint':
+      case 'Excel':
+      case 'WordPress':
+      case 'Social Media':
+      case 'TEMPLATES':
+        return <LayoutTemplate className="w-4 h-4 text-emerald-600" />;
+      case 'PLR Articles':
+      case 'PLR Ebooks':
+      case 'PLR Templates':
+      case 'Resell Products':
+      case 'Business Resources':
+      case 'PLR / MRR':
+        return <Repeat className="w-4 h-4 text-amber-600" />;
+      case 'MEGA BUNDLES':
+        return <Flame className="w-4 h-4 text-amber-600" />;
       default:
         return <FolderArchive className="w-4 h-4 text-blue-600" />;
     }

@@ -1,116 +1,100 @@
 'use client';
 
 import React from 'react';
-import { ProductCategory, DEFAULT_CATEGORIES } from '@/lib/types';
-import {
-  Sparkles,
-  Layers,
-  Briefcase,
-  Mail,
-  Code2,
-  Video,
-  BookOpen,
-  LayoutGrid,
-  Folder,
-} from 'lucide-react';
-
-export const ALL_CATEGORIES: string[] = [...DEFAULT_CATEGORIES];
+import { CATEGORY_TAXONOMY } from '@/lib/types';
+import { ChevronRight, X } from 'lucide-react';
 
 interface CategoryFilterProps {
-  selectedCategory: string; // 'ALL' or a category
+  selectedCategory: string;
   onSelectCategory: (cat: string) => void;
   counts: Record<string, number>;
   categories?: string[];
 }
 
+export const ALL_CATEGORIES = [
+  ...CATEGORY_TAXONOMY.groups.flatMap((g) => g.subcategories),
+  'MEGA BUNDLES',
+];
+
 export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   selectedCategory,
   onSelectCategory,
   counts,
-  categories = ALL_CATEGORIES,
 }) => {
-  const getCategoryIcon = (cat: string) => {
-    switch (cat) {
-      case 'CONTENT CREATION & MEDIA ASSETS':
-        return <Sparkles className="w-4 h-4 shrink-0" />;
-      case 'GRAPHIC DESIGN & CREATIVE TEMPLATES':
-        return <Layers className="w-4 h-4 shrink-0" />;
-      case 'BUSINESS & DIGITAL MARKETING RESOURCES':
-        return <Briefcase className="w-4 h-4 shrink-0" />;
-      case 'EMAIL MARKETING MEGA BUNDLE':
-        return <Mail className="w-4 h-4 shrink-0" />;
-      case 'SOFTWARE, WORDPRESS & DEVELOPMENT TOOLS':
-        return <Code2 className="w-4 h-4 shrink-0" />;
-      case 'VIDEO & AUDIO PRODUCTION BUNDLE':
-        return <Video className="w-4 h-4 shrink-0" />;
-      case 'COURSES & EDUCATIONAL RESOURCES':
-        return <BookOpen className="w-4 h-4 shrink-0" />;
-      default:
-        return <LayoutGrid className="w-4 h-4 shrink-0" />;
-    }
-  };
+  // If 'ALL' is selected, don't show any duplicate box in the body
+  if (selectedCategory === 'ALL') {
+    return null;
+  }
+
+  // Find if a parent group or one of its subcategories is selected
+  const activeGroup = CATEGORY_TAXONOMY.groups.find(
+    (g) => g.name === selectedCategory || g.subcategories.includes(selectedCategory)
+  );
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold tracking-wider uppercase text-slate-500 font-mono">
-          Browse by Core Category
-        </h2>
-        <span className="text-xs text-slate-500 font-mono">
-          Showing {counts[selectedCategory] || counts['ALL'] || 0} Assets
+    <div className="w-full bg-white rounded-lg p-3 border border-slate-200/80 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-slate-500 font-medium">Filtering by:</span>
+        {activeGroup && activeGroup.name !== selectedCategory && (
+          <>
+            <button
+              onClick={() => onSelectCategory(activeGroup.name)}
+              className="text-slate-700 hover:text-blue-600 font-medium cursor-pointer"
+            >
+              {activeGroup.name}
+            </button>
+            <ChevronRight className="w-3 h-3 text-slate-400" />
+          </>
+        )}
+        <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+          {selectedCategory}
         </span>
+        {counts[selectedCategory] !== undefined && (
+          <span className="text-slate-400 font-mono text-[11px]">
+            ({counts[selectedCategory]} items)
+          </span>
+        )}
       </div>
 
-      {/* Filter scroll bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none scroll-smooth">
-        {/* All Categories Option */}
-        <button
-          onClick={() => onSelectCategory('ALL')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
-            selectedCategory === 'ALL'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'bg-white text-slate-700 hover:text-blue-600 hover:bg-blue-50/50 border border-slate-200 shadow-xs'
-          }`}
-        >
-          <LayoutGrid className="w-4 h-4 shrink-0" />
-          <span>ALL CATEGORIES</span>
-          <span
-            className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-              selectedCategory === 'ALL' ? 'bg-white text-blue-700 font-bold' : 'bg-slate-100 text-slate-600'
+      {/* Subcategories quick filter pills if activeGroup exists */}
+      {activeGroup && (
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+          <button
+            onClick={() => onSelectCategory(activeGroup.name)}
+            className={`px-2 py-1 rounded text-xs transition-colors shrink-0 cursor-pointer ${
+              selectedCategory === activeGroup.name
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
             }`}
           >
-            {counts['ALL'] || 0}
-          </span>
-        </button>
-
-        {/* Categories Pills */}
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          const count = counts[cat] || 0;
-
-          return (
-            <button
-              key={cat}
-              onClick={() => onSelectCategory(cat)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
-                isSelected
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-white text-slate-700 hover:text-blue-600 hover:bg-blue-50/50 border border-slate-200 shadow-xs'
-              }`}
-            >
-              {getCategoryIcon(cat)}
-              <span>{cat}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                  isSelected ? 'bg-white text-blue-700 font-bold' : 'bg-slate-100 text-slate-600'
+            All {activeGroup.name}
+          </button>
+          {activeGroup.subcategories.map((sub) => {
+            const isSubSelected = selectedCategory === sub;
+            return (
+              <button
+                key={sub}
+                onClick={() => onSelectCategory(sub)}
+                className={`px-2 py-1 rounded text-xs transition-colors shrink-0 cursor-pointer ${
+                  isSubSelected
+                    ? 'bg-slate-900 text-white font-medium'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                {sub}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <button
+        onClick={() => onSelectCategory('ALL')}
+        className="flex items-center gap-1 text-slate-500 hover:text-rose-600 text-xs font-medium cursor-pointer shrink-0 transition-colors"
+      >
+        <span>Clear filter</span>
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 };

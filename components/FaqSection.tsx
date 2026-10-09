@@ -49,18 +49,17 @@ export const FaqSection: React.FC = () => {
   };
 
   return (
-    <section id="faq" className="py-14 border-b border-slate-200 bg-white">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 text-xs font-mono font-bold uppercase text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full mb-3">
-            <HelpCircle className="w-3.5 h-3.5" />
-            Frequently Asked Questions
+    <section id="faq" className="py-10 sm:py-12 border-b border-slate-200/80 bg-white">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+        <div className="text-center mb-8">
+          <div className="text-xs font-mono font-medium uppercase tracking-wider text-slate-500 mb-1">
+            Common Inquiries
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-            Everything You Need to Know
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Frequently Asked Questions
           </h2>
-          <p className="mt-2 text-xs sm:text-sm text-slate-500">
-            Have questions about licenses, cloud downloads, or formats? We have answers.
+          <p className="mt-1.5 text-xs text-slate-500">
+            Details on licensing, instant cloud delivery, file formats, and lifetime access.
           </p>
         </div>
 

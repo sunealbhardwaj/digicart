@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, Coupon, StoreSettings, Order, ProductCategory } from '@/lib/types';
+import { Product, Coupon, StoreSettings, Order, ProductCategory, CATEGORY_TAXONOMY, DEFAULT_CATEGORIES } from '@/lib/types';
 import {
   getStoredProducts,
   saveStoredProducts,
@@ -17,7 +17,7 @@ import {
   formatPrice,
 } from '@/lib/store';
 import { ALL_CATEGORIES } from '@/components/CategoryFilter';
-import { SAMPLE_IMAGE_PRESETS } from '@/lib/initialData';
+import { SAMPLE_IMAGE_PRESETS, INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS, INITIAL_ORDERS } from '@/lib/initialData';
 import {
   Lock,
   LogOut,
@@ -80,11 +80,9 @@ function generateCouponId(): string {
 }
 
 export default function AdminDashboardPage() {
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return Boolean(localStorage.getItem('apex_admin_session_v1'));
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
@@ -122,12 +120,37 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Stored Data States
-  const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
-  const [categories, setCategories] = useState<string[]>(() => getStoredCategories());
-  const [coupons, setCoupons] = useState<Coupon[]>(() => getStoredCoupons());
-  const [settings, setSettings] = useState<StoreSettings | null>(() => getStoredSettings());
-  const [orders, setOrders] = useState<Order[]>(() => getStoredOrders());
+  // Stored Data States initialized with server-safe defaults
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [categories, setCategories] = useState<string[]>([...DEFAULT_CATEGORIES]);
+  const [coupons, setCoupons] = useState<Coupon[]>(INITIAL_COUPONS);
+  const [settings, setSettings] = useState<StoreSettings | null>(INITIAL_SETTINGS);
+  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+
+  // Announcement bar draft state (safe server initial values)
+  const [bannerText, setBannerText] = useState(INITIAL_SETTINGS.announcementText);
+  const [bannerActive, setBannerActive] = useState(INITIAL_SETTINGS.announcementActive);
+  const [countdownActive, setCountdownActive] = useState(INITIAL_SETTINGS.countdownActive);
+
+  useEffect(() => {
+    const syncAdminData = () => {
+      setIsMounted(true);
+      const session = Boolean(localStorage.getItem('apex_admin_session_v1'));
+      setIsAuthenticated(session);
+      setProducts(getStoredProducts());
+      setCategories(getStoredCategories());
+      setCoupons(getStoredCoupons());
+      const currentSettings = getStoredSettings();
+      setSettings(currentSettings);
+      setBannerText(currentSettings.announcementText);
+      setBannerActive(currentSettings.announcementActive);
+      setCountdownActive(currentSettings.countdownActive);
+      setOrders(getStoredOrders());
+    };
+
+    const timer = setTimeout(syncAdminData, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Category Management Draft State
   const [newCategoryName, setNewCategoryName] = useState<string>('');
@@ -148,11 +171,6 @@ export default function AdminDashboardPage() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('ALL');
-
-  // Announcement bar draft state
-  const [bannerText, setBannerText] = useState(() => getStoredSettings().announcementText);
-  const [bannerActive, setBannerActive] = useState(() => getStoredSettings().announcementActive);
-  const [countdownActive, setCountdownActive] = useState(() => getStoredSettings().countdownActive);
 
   // New Coupon Draft state
   const [newCouponCode, setNewCouponCode] = useState('');
@@ -376,7 +394,7 @@ export default function AdminDashboardPage() {
     setEditingProduct({
       id: generateProductId(),
       name: '',
-      category: 'CONTENT CREATION & MEDIA ASSETS',
+      category: 'Content Creation',
       description: '',
       features: ['Commercial License Included', 'Instant Google Drive / Mega Access'],
       regularPrice: 1999,
@@ -392,7 +410,7 @@ export default function AdminDashboardPage() {
       imageUrl: defaultSample,
       isActive: true,
     });
-    setPresetCategoryFilter('CONTENT CREATION & MEDIA ASSETS');
+    setPresetCategoryFilter('Content Creation');
     setIsProductModalOpen(true);
   };
 
@@ -418,7 +436,7 @@ export default function AdminDashboardPage() {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, ''),
-      category: editingProduct.category || 'CONTENT CREATION & MEDIA ASSETS',
+      category: editingProduct.category || 'Content Creation',
       description: editingProduct.description || '',
       features:
         Array.isArray(editingProduct.features) && editingProduct.features.length > 0
@@ -592,6 +610,20 @@ export default function AdminDashboardPage() {
   const activeDealsCount = products.filter(
     (p) => p.regularPrice > p.salePrice || (p.badges && p.badges.length > 0)
   ).length;
+
+  // ----------------------------------------------------
+  // HYDRATION-SAFE MOUNT GUARD
+  // ----------------------------------------------------
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-xl flex flex-col items-center justify-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-mono text-slate-500">Loading admin console...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ----------------------------------------------------
   // LOGIN SCREEN (White and Blue Theme)
@@ -1040,6 +1072,40 @@ export default function AdminDashboardPage() {
                   <span>Create Category</span>
                 </button>
               </form>
+            </div>
+
+            {/* Structured Taxonomy Tree Overview Card */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+              <h3 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-blue-600" />
+                Store Taxonomy Structure & Navigation Tree
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {CATEGORY_TAXONOMY.groups.map((group) => (
+                  <div key={group.name} className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 font-mono flex items-center gap-1.5">
+                        <Folder className="w-3.5 h-3.5 text-blue-600" />
+                        {group.name}
+                      </span>
+                      <span className="text-[10px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono font-bold">
+                        {group.subcategories.length}
+                      </span>
+                    </div>
+                    <ul className="space-y-1 pl-2 border-l-2 border-blue-200">
+                      {group.subcategories.map((sub) => {
+                        const count = products.filter((p) => p.category === sub).length;
+                        return (
+                          <li key={sub} className="text-[11px] text-slate-600 flex items-center justify-between">
+                            <span className="truncate pr-1">{sub}</span>
+                            <span className="text-[10px] font-mono text-slate-400 font-semibold">{count}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Existing Categories Grid */}
@@ -1730,7 +1796,7 @@ CREATE TABLE IF NOT EXISTS \`store_settings\` (
                   )}
 
                   <select
-                    value={editingProduct.category || categories[0] || 'CONTENT CREATION & MEDIA ASSETS'}
+                    value={editingProduct.category || categories[0] || 'Content Creation'}
                     onChange={(e) => {
                       const newCat = e.target.value as ProductCategory;
                       setEditingProduct({
