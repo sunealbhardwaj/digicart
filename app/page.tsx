@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Product, Currency, CartItem, Coupon, Order, StoreSettings, CATEGORY_TAXONOMY, DEFAULT_CATEGORIES } from '@/lib/types';
 import { INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS } from '@/lib/initialData';
 import {
@@ -25,6 +26,7 @@ import { Footer } from '@/components/Footer';
 import { Sparkles, Search, SlidersHorizontal, Star, ShieldCheck } from 'lucide-react';
 
 export default function StorefrontPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [categories, setCategories] = useState<string[]>([...DEFAULT_CATEGORIES]);
   const [coupons, setCoupons] = useState<Coupon[]>(INITIAL_COUPONS);
@@ -95,8 +97,7 @@ export default function StorefrontPage() {
           const prods = getStoredProducts();
           const match = prods.find((p) => p.id === prodParam || p.slug === prodParam);
           if (match) {
-            setSelectedProduct(match);
-            setIsDetailOpen(true);
+            router.push(`/product/${match.slug || match.id}`);
           }
         }
       } catch {
@@ -125,7 +126,7 @@ export default function StorefrontPage() {
       window.removeEventListener('apex_coupons_updated', handleUpdate);
       window.removeEventListener('apex_settings_updated', handleUpdate);
     };
-  }, []);
+  }, [router]);
 
   // Save cart to local storage only after mount
   useEffect(() => {
@@ -201,8 +202,7 @@ export default function StorefrontPage() {
   };
 
   const handleViewDetails = (product: Product) => {
-    setSelectedProduct(product);
-    setIsDetailOpen(true);
+    router.push(`/product/${product.slug || product.id}`);
   };
 
   // Category counts

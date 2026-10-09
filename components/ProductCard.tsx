@@ -12,7 +12,7 @@ interface ProductCardProps {
   currency: Currency;
   onAddToCart: (product: Product) => void;
   onBuyNow: (product: Product) => void;
-  onViewDetails: (product: Product) => void;
+  onViewDetails?: (product: Product) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -20,8 +20,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   currency,
   onAddToCart,
   onBuyNow,
-  onViewDetails,
 }) => {
+  const productUrl = `/product/${product.slug || product.id}`;
   const discountPercent = Math.round(
     ((product.regularPrice - product.salePrice) / product.regularPrice) * 100
   );
@@ -29,9 +29,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <div className="group relative bg-white rounded-xl border border-slate-200 hover:border-blue-500 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 flex flex-col justify-between overflow-hidden shadow-xs">
       {/* Top Graphic Mockup Area */}
-      <div
-        onClick={() => onViewDetails(product)}
-        className="cursor-pointer relative overflow-hidden"
+      <Link
+        href={productUrl}
+        className="block cursor-pointer relative overflow-hidden"
       >
         <ProductMockupGraphic
           category={product.category}
@@ -77,7 +77,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </span>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Card Body */}
       <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between bg-white">
@@ -97,14 +97,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Title */}
           <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
             <Link
-              href={`/product/${product.slug || product.id}`}
-              onClick={(e) => {
-                // If normal left-click without modifier keys, open modal for fast preview
-                if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
-                  e.preventDefault();
-                  onViewDetails(product);
-                }
-              }}
+              href={productUrl}
               className="hover:underline cursor-pointer"
             >
               {product.name}
@@ -112,9 +105,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </h3>
 
           {/* Short description */}
-          <p className="mt-2 text-xs text-slate-600 line-clamp-2 leading-relaxed">
-            {product.description}
-          </p>
+          <Link href={productUrl} className="block mt-2 group/desc">
+            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed group-hover/desc:text-slate-900 transition-colors">
+              {product.description}
+            </p>
+          </Link>
 
           {/* Delivery tag */}
           <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500 font-mono">

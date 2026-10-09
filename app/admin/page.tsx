@@ -18,6 +18,7 @@ import {
 } from '@/lib/store';
 import { ALL_CATEGORIES } from '@/components/CategoryFilter';
 import { SAMPLE_IMAGE_PRESETS, INITIAL_PRODUCTS, INITIAL_COUPONS, INITIAL_SETTINGS, INITIAL_ORDERS } from '@/lib/initialData';
+import { buildProductTitle, buildProductDescription } from '@/lib/seo';
 import {
   Lock,
   LogOut,
@@ -52,6 +53,11 @@ import {
   UploadCloud,
   FileImage,
   ImageUp,
+  Globe,
+  Smartphone,
+  Monitor,
+  Star,
+  MoreVertical,
 } from 'lucide-react';
 
 const COMMON_BADGES = [
@@ -95,6 +101,59 @@ function generateProductId(): string {
 
 function generateCouponId(): string {
   return `coup-${Date.now()}`;
+}
+
+function highlightSerpMatches(
+  text: string,
+  searchQuery: string,
+  metaKeywords: string[] = []
+): React.ReactNode {
+  if (!text) return null;
+
+  const terms: string[] = [];
+  if (searchQuery.trim()) {
+    terms.push(
+      ...searchQuery
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 1)
+    );
+  } else if (metaKeywords.length > 0) {
+    metaKeywords.forEach((kw) => {
+      terms.push(
+        ...kw
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 2)
+      );
+    });
+  }
+
+  const uniqueTerms = Array.from(new Set(terms));
+  if (uniqueTerms.length === 0) {
+    return text;
+  }
+
+  const escaped = uniqueTerms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  if (!escaped) return text;
+
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+
+  return parts.map((part, i) => {
+    if (uniqueTerms.includes(part.toLowerCase())) {
+      return (
+        <span
+          key={i}
+          className="font-bold text-slate-900 bg-amber-100/90 text-inherit px-0.5 rounded"
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
 }
 
 export default function AdminDashboardPage() {
@@ -190,6 +249,8 @@ export default function AdminDashboardPage() {
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('ALL');
   const [keywordInput, setKeywordInput] = useState('');
+  const [seoPreviewDevice, setSeoPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [seoSearchSimulator, setSeoSearchSimulator] = useState('');
 
   // New Coupon Draft state
   const [newCouponCode, setNewCouponCode] = useState('');
@@ -411,6 +472,7 @@ export default function AdminDashboardPage() {
   const handleOpenAddProduct = () => {
     const defaultSample = SAMPLE_IMAGE_PRESETS[0]?.url || '';
     setKeywordInput('');
+    setSeoSearchSimulator('');
     setEditingProduct({
       id: generateProductId(),
       name: '',
@@ -437,6 +499,7 @@ export default function AdminDashboardPage() {
 
   const handleOpenEditProduct = (prod: Product) => {
     setKeywordInput('');
+    setSeoSearchSimulator('');
     setEditingProduct({
       ...prod,
       metaKeywords: prod.metaKeywords ? [...prod.metaKeywords] : [],
@@ -1082,6 +1145,15 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={`/product/${p.slug || p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Open Live Product Page"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
                             <button
                               onClick={() => handleOpenEditProduct(p)}
                               className="p-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
@@ -1812,9 +1884,52 @@ CREATE TABLE IF NOT EXISTS \`store_settings\` (
       </div>
 
       {/* PRODUCT CREATE / EDIT MODAL (White and Blue Theme with Rich Sample Image Gallery) */}
-      {isProductModalOpen && editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden my-6">
+      {isProductModalOpen && editingProduct && (() => {
+        const previewSlug =
+          editingProduct.slug ||
+          (editingProduct.name || 'product-vault')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+
+        const previewMock: Product = {
+          id: editingProduct.id || 'prod-preview',
+          name: editingProduct.name || 'Digital Product Title',
+          slug: previewSlug,
+          category: editingProduct.category || 'Content Creation',
+          description:
+            editingProduct.description ||
+            'High-converting digital products marketplace bundle with templates, graphic assets, software tools, and instant cloud delivery.',
+          features:
+            editingProduct.features && editingProduct.features.length > 0
+              ? editingProduct.features
+              : ['Full Commercial Rights', 'Instant Cloud Download'],
+          regularPrice: Number(editingProduct.regularPrice) || 1999,
+          salePrice: Number(editingProduct.salePrice) || 149,
+          badges: editingProduct.badges || ['HOT DEAL'],
+          deliveryLink: editingProduct.deliveryLink || '',
+          fileSize: editingProduct.fileSize || '10.0 GB',
+          fileFormat: editingProduct.fileFormat || 'ZIP / PSD',
+          rating: Number(editingProduct.rating) || 4.9,
+          reviewCount: Number(editingProduct.reviewCount) || 120,
+          salesCount: Number(editingProduct.salesCount) || 250,
+          mockupTheme: editingProduct.mockupTheme || 'amber',
+          imageUrl: editingProduct.imageUrl || '',
+          metaKeywords: editingProduct.metaKeywords || [],
+          isActive: true,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const liveSerpTitle = editingProduct.name
+          ? buildProductTitle(previewMock)
+          : 'ApexDigital - Digital Assets & Creator Mega Marketplace';
+        const liveSerpDescription = editingProduct.name
+          ? buildProductDescription(previewMock)
+          : 'High-converting digital products marketplace for creator bundles, templates, and marketing resources with instant cloud delivery.';
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <div className="relative w-full max-w-3xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden my-6">
             <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Package className="w-4 h-4 text-blue-600" />
@@ -2387,6 +2502,264 @@ CREATE TABLE IF NOT EXISTS \`store_settings\` (
                 </div>
               </div>
 
+              {/* REAL-TIME LIVE SEO PREVIEW SECTION */}
+              <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      <Search className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs font-mono font-bold text-slate-900">
+                          SEO Live Preview (Google Search SERP)
+                        </h3>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                          Live Sync
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Real-time visualization of how the title, meta description, and keywords render on Google.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Device Toggle (Desktop / Mobile) */}
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setSeoPreviewDevice('desktop')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                        seoPreviewDevice === 'desktop'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Monitor className="w-3 h-3" />
+                      <span>Desktop</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSeoPreviewDevice('mobile')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                        seoPreviewDevice === 'mobile'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Smartphone className="w-3 h-3" />
+                      <span>Mobile</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Simulated Search Query & Live Keyword Highlighter */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-slate-700">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Simulate Google Search Query / Term Match:</span>
+                    </div>
+                    {seoSearchSimulator && (
+                      <button
+                        type="button"
+                        onClick={() => setSeoSearchSimulator('')}
+                        className="text-[10px] font-mono text-slate-400 hover:text-rose-600 cursor-pointer self-start sm:self-auto"
+                      >
+                        Clear Simulated Query
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={seoSearchSimulator}
+                        onChange={(e) => setSeoSearchSimulator(e.target.value)}
+                        placeholder="Type any search query to test keyword matching in the snippet..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Clickable Meta Keywords to test in simulator */}
+                  {editingProduct.metaKeywords && editingProduct.metaKeywords.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 pt-1">
+                      <span className="text-[10px] font-mono text-slate-400 mr-1">
+                        Click keyword to simulate query:
+                      </span>
+                      {editingProduct.metaKeywords.map((kw, idx) => {
+                        const isSimulated = seoSearchSimulator.toLowerCase() === kw.toLowerCase();
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setSeoSearchSimulator(isSimulated ? '' : kw)}
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded transition-all cursor-pointer ${
+                              isSimulated
+                                ? 'bg-amber-400 text-slate-900 font-bold shadow-2xs'
+                                : 'bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200'
+                            }`}
+                          >
+                            #{kw}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Search Result Preview Box */}
+                <div
+                  className={`mx-auto transition-all ${
+                    seoPreviewDevice === 'mobile'
+                      ? 'max-w-md bg-white border border-slate-300 rounded-2xl p-4 shadow-sm'
+                      : 'w-full bg-white border border-slate-200 rounded-xl p-4 shadow-xs'
+                  }`}
+                >
+                  {/* Google Breadcrumb / Header */}
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                        A
+                      </div>
+                      <div className="leading-tight truncate">
+                        <div className="text-xs text-[#202124] font-medium font-sans">ApexDigital</div>
+                        <div className="text-[11px] text-[#4d5156] font-mono truncate max-w-[280px] sm:max-w-md">
+                          https://apexdigital.market › product › {previewSlug}
+                        </div>
+                      </div>
+                    </div>
+                    <MoreVertical className="w-4 h-4 text-slate-400 shrink-0" />
+                  </div>
+
+                  {/* Title Link */}
+                  <h4
+                    className={`font-sans text-[#1a0dab] hover:underline cursor-pointer tracking-tight leading-snug break-words ${
+                      seoPreviewDevice === 'mobile' ? 'text-[17px] font-medium' : 'text-[19px] font-normal'
+                    }`}
+                  >
+                    {highlightSerpMatches(liveSerpTitle, seoSearchSimulator, editingProduct.metaKeywords)}
+                  </h4>
+
+                  {/* Rich Snippet Details (Ratings, Pricing, Availability) */}
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-[#4d5156] font-sans mt-1">
+                    <div className="flex items-center gap-1 text-amber-500 font-bold">
+                      <div className="flex items-center">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <span>4.9</span>
+                      <span className="font-normal text-slate-500">(120)</span>
+                    </div>
+                    <span>·</span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{editingProduct.salePrice || 149}.00
+                    </span>
+                    <span>·</span>
+                    <span className="text-emerald-700 font-medium">In stock</span>
+                    <span>·</span>
+                    <span className="text-slate-500">Digital download</span>
+                  </div>
+
+                  {/* Snippet Description */}
+                  <p className="text-[13px] sm:text-[14px] text-[#4d5156] font-sans leading-relaxed mt-1.5 break-words line-clamp-3">
+                    {highlightSerpMatches(liveSerpDescription, seoSearchSimulator, editingProduct.metaKeywords)}
+                  </p>
+
+                  {/* Meta Keywords in Search Display */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase text-slate-400">
+                      <Tag className="w-3 h-3 text-blue-600" />
+                      <span>Indexed Meta Keywords ({editingProduct.metaKeywords?.length || 0}):</span>
+                    </div>
+                    {editingProduct.metaKeywords && editingProduct.metaKeywords.length > 0 ? (
+                      editingProduct.metaKeywords.map((kw, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium"
+                        >
+                          #{kw}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] font-mono text-amber-600 italic">
+                        No keywords configured yet. Add keywords in the field above to appear here.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* SEO Quality Scorecard */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                  {/* Title length check */}
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                    <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+                      <span className="font-bold text-slate-700">Title Length</span>
+                      <span
+                        className={`font-bold px-1.5 py-0.2 rounded text-[10px] ${
+                          liveSerpTitle.length <= 60
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
+                      >
+                        {liveSerpTitle.length} / 60 chars
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {liveSerpTitle.length <= 60
+                        ? '✓ Optimal length for Google desktop & mobile display'
+                        : '⚠ Title may be truncated with ellipsis (...) on SERP'}
+                    </p>
+                  </div>
+
+                  {/* Description length check */}
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                    <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+                      <span className="font-bold text-slate-700">Meta Description</span>
+                      <span
+                        className={`font-bold px-1.5 py-0.2 rounded text-[10px] ${
+                          liveSerpDescription.length >= 100 && liveSerpDescription.length <= 160
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}
+                      >
+                        {liveSerpDescription.length} / 160 chars
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {liveSerpDescription.length >= 100 && liveSerpDescription.length <= 160
+                        ? '✓ Perfect length for high-CTR Google snippet'
+                        : '✓ Auto-formatted to avoid truncation on Google SERP'}
+                    </p>
+                  </div>
+
+                  {/* Meta keywords readiness */}
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                    <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+                      <span className="font-bold text-slate-700">Meta Keywords</span>
+                      <span
+                        className={`font-bold px-1.5 py-0.2 rounded text-[10px] ${
+                          (editingProduct.metaKeywords?.length || 0) >= 3
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
+                      >
+                        {editingProduct.metaKeywords?.length || 0} active
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {(editingProduct.metaKeywords?.length || 0) >= 3
+                        ? '✓ Solid keyword coverage for indexing & search queries'
+                        : 'Add 3+ meta keywords for maximum search visibility'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Badges Selector */}
               <div>
                 <label className="block text-xs font-mono font-bold text-slate-700 mb-1.5">
@@ -2433,7 +2806,8 @@ CREATE TABLE IF NOT EXISTS \`store_settings\` (
             </form>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Floating Admin Toast */}
       {adminToast && (

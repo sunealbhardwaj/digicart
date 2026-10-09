@@ -53,7 +53,7 @@ interface ProductPageViewProps {
 
 export default function ProductPageView({ initialProduct }: ProductPageViewProps) {
   const router = useRouter();
-  const [product] = useState<Product>(initialProduct);
+  const [product, setProduct] = useState<Product>(initialProduct);
   const [currency, setCurrency] = useState<Currency>('INR');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isMounted, setIsMounted] = useState(false);
@@ -74,7 +74,21 @@ export default function ProductPageView({ initialProduct }: ProductPageViewProps
       setIsMounted(true);
       setCoupons(getStoredCoupons());
       setSettings(getStoredSettings());
-      setAllProducts(getStoredProducts());
+
+      try {
+        const storedProds = getStoredProducts();
+        if (storedProds && storedProds.length > 0) {
+          setAllProducts(storedProds);
+          const matched = storedProds.find(
+            (p) => p.id === initialProduct.id || (p.slug && p.slug === initialProduct.slug)
+          );
+          if (matched) {
+            setProduct(matched);
+          }
+        }
+      } catch {
+        // ignore
+      }
 
       try {
         const savedCart = localStorage.getItem('apex_cart_v1');
@@ -92,7 +106,7 @@ export default function ProductPageView({ initialProduct }: ProductPageViewProps
     }, 0);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [initialProduct.id, initialProduct.slug]);
 
   // Save cart
   useEffect(() => {
