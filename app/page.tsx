@@ -282,7 +282,8 @@ export default function StorefrontPage() {
         const matchDesc = p.description.toLowerCase().includes(query);
         const matchFeature = p.features.some((f) => f.toLowerCase().includes(query));
         const matchBadge = p.badges.some((b) => b.toLowerCase().includes(query));
-        if (!matchTitle && !matchCategory && !matchDesc && !matchFeature && !matchBadge) {
+        const matchKeyword = p.metaKeywords?.some((k) => k.toLowerCase().includes(query));
+        if (!matchTitle && !matchCategory && !matchDesc && !matchFeature && !matchBadge && !matchKeyword) {
           return false;
         }
       }

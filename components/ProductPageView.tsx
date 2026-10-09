@@ -44,6 +44,7 @@ import {
   Layers,
   FileCheck,
   ExternalLink,
+  Tag,
 } from 'lucide-react';
 
 interface ProductPageViewProps {
@@ -436,6 +437,30 @@ export default function ProductPageView({ initialProduct }: ProductPageViewProps
                 ))}
               </ul>
             </div>
+
+            {/* Custom Meta Keywords / Search Discoverability */}
+            {product.metaKeywords && product.metaKeywords.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-slate-800 mb-3">
+                  <Tag className="w-4 h-4 text-blue-600" />
+                  <span>Discoverability & Search Keywords</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Indexed topics and search terms related to this digital product:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {product.metaKeywords.map((kw, idx) => (
+                    <Link
+                      key={idx}
+                      href={`/?q=${encodeURIComponent(kw)}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-600 border border-slate-200 text-xs font-mono transition-colors"
+                    >
+                      <span>#{kw}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

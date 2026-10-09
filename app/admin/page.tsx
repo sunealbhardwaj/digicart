@@ -67,6 +67,24 @@ const COMMON_BADGES = [
   'NEW RELEASE',
 ];
 
+const SUGGESTED_META_KEYWORDS = [
+  'viral reels',
+  'canva templates',
+  'shorts templates',
+  'chatgpt prompts',
+  'plr mrr',
+  'content creator vault',
+  'notion template',
+  'instant download',
+  'commercial rights',
+  'graphic design pack',
+  'video editing bundle',
+  'youtube thumbnails',
+  'instagram carousels',
+  'resell rights',
+  'digital product pack',
+];
+
 function generateAdminToken(): string {
   return `adm_token_${Date.now()}`;
 }
@@ -171,6 +189,7 @@ export default function AdminDashboardPage() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('ALL');
+  const [keywordInput, setKeywordInput] = useState('');
 
   // New Coupon Draft state
   const [newCouponCode, setNewCouponCode] = useState('');
@@ -391,6 +410,7 @@ export default function AdminDashboardPage() {
   // ----------------------------------------------------
   const handleOpenAddProduct = () => {
     const defaultSample = SAMPLE_IMAGE_PRESETS[0]?.url || '';
+    setKeywordInput('');
     setEditingProduct({
       id: generateProductId(),
       name: '',
@@ -408,6 +428,7 @@ export default function AdminDashboardPage() {
       salesCount: 450,
       mockupTheme: 'amber',
       imageUrl: defaultSample,
+      metaKeywords: ['digital products', 'creator vault', 'instant download'],
       isActive: true,
     });
     setPresetCategoryFilter('Content Creation');
@@ -415,7 +436,11 @@ export default function AdminDashboardPage() {
   };
 
   const handleOpenEditProduct = (prod: Product) => {
-    setEditingProduct({ ...prod });
+    setKeywordInput('');
+    setEditingProduct({
+      ...prod,
+      metaKeywords: prod.metaKeywords ? [...prod.metaKeywords] : [],
+    });
     setPresetCategoryFilter(prod.category || 'ALL');
     setIsProductModalOpen(true);
   };
@@ -426,6 +451,24 @@ export default function AdminDashboardPage() {
 
     const currentList = getStoredProducts();
     const existingIndex = currentList.findIndex((p) => p.id === editingProduct.id);
+
+    // Parse and sanitize custom meta keywords
+    let finalKeywords: string[] = Array.isArray(editingProduct.metaKeywords)
+      ? [...editingProduct.metaKeywords]
+      : typeof (editingProduct as any).metaKeywords === 'string'
+        ? ((editingProduct as any).metaKeywords as string)
+            .split(',')
+            .map((k: string) => k.trim())
+            .filter(Boolean)
+        : [];
+
+    if (keywordInput.trim()) {
+      const pendingKeywords = keywordInput
+        .split(',')
+        .map((k) => k.trim().replace(/^#+/, ''))
+        .filter((k) => k && !finalKeywords.includes(k));
+      finalKeywords = [...finalKeywords, ...pendingKeywords];
+    }
 
     const updatedProduct: Product = {
       id: editingProduct.id || generateProductId(),
@@ -455,6 +498,7 @@ export default function AdminDashboardPage() {
       salesCount: Number(editingProduct.salesCount) || 250,
       mockupTheme: editingProduct.mockupTheme || 'amber',
       imageUrl: editingProduct.imageUrl || '',
+      metaKeywords: finalKeywords,
       isFeatured: editingProduct.isFeatured ?? false,
       isActive: editingProduct.isActive ?? true,
       updatedAt: new Date().toISOString(),
@@ -474,6 +518,7 @@ export default function AdminDashboardPage() {
     setProducts(nextList);
     setIsProductModalOpen(false);
     setEditingProduct(null);
+    setKeywordInput('');
 
     // Sync with server API
     fetch('/api/products', {
@@ -517,6 +562,39 @@ export default function AdminDashboardPage() {
     const exists = currentBadges.includes(badge);
     const updated = exists ? currentBadges.filter((b) => b !== badge) : [...currentBadges, badge];
     setEditingProduct({ ...editingProduct, badges: updated });
+  };
+
+  // Custom meta keyword management on editing product
+  const handleAddKeyword = (kw: string) => {
+    if (!kw || !editingProduct) return;
+    const clean = kw.trim().replace(/^#+/, '');
+    if (!clean) return;
+    const current = editingProduct.metaKeywords || [];
+    if (!current.includes(clean)) {
+      setEditingProduct({
+        ...editingProduct,
+        metaKeywords: [...current, clean],
+      });
+    }
+    setKeywordInput('');
+  };
+
+  const handleRemoveKeyword = (kwToRemove: string) => {
+    if (!editingProduct) return;
+    const current = editingProduct.metaKeywords || [];
+    setEditingProduct({
+      ...editingProduct,
+      metaKeywords: current.filter((k) => k !== kwToRemove),
+    });
+  };
+
+  const handleClearKeywords = () => {
+    if (!editingProduct) return;
+    setEditingProduct({
+      ...editingProduct,
+      metaKeywords: [],
+    });
+    setKeywordInput('');
   };
 
   // ----------------------------------------------------
@@ -595,7 +673,8 @@ export default function AdminDashboardPage() {
       const matchSearch =
         !productSearch ||
         p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-        p.category.toLowerCase().includes(productSearch.toLowerCase());
+        p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
+        p.metaKeywords?.some((k) => k.toLowerCase().includes(productSearch.toLowerCase()));
       return matchCat && matchSearch;
     });
   }, [products, filterCategory, productSearch]);
@@ -946,6 +1025,15 @@ export default function AdminDashboardPage() {
                               <span className="text-[10px] font-mono text-blue-600 uppercase font-semibold">
                                 {p.category}
                               </span>
+                              {p.metaKeywords && p.metaKeywords.length > 0 ? (
+                                <div className="flex items-center gap-1 mt-0.5 text-[9px] font-mono text-slate-500">
+                                  <Tag className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                                  <span className="truncate max-w-[180px]" title={p.metaKeywords.join(', ')}>
+                                    {p.metaKeywords.slice(0, 2).map((k) => `#${k}`).join(' ')}
+                                    {p.metaKeywords.length > 2 && ` +${p.metaKeywords.length - 2}`}
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         </td>
@@ -2178,6 +2266,125 @@ CREATE TABLE IF NOT EXISTS \`store_settings\` (
                   placeholder="Feature 1&#10;Feature 2&#10;Feature 3"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:border-blue-600 focus:bg-white"
                 />
+              </div>
+
+              {/* Custom Meta Keywords for SEO & Search Engine Discoverability */}
+              <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                    <label className="text-xs font-mono font-bold text-slate-800">
+                      Custom Meta Keywords (SEO & Discoverability)
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
+                      {editingProduct.metaKeywords?.length || 0} keywords
+                    </span>
+                    {(editingProduct.metaKeywords?.length || 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearKeywords}
+                        className="text-[10px] font-mono text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-600 leading-normal">
+                  Injected into HTML <code className="text-blue-600 font-mono text-[10px]">&lt;meta name=&quot;keywords&quot;&gt;</code>, JSON-LD Schema, XML sitemaps, and marketplace search matching to boost search engine indexing and discoverability.
+                </p>
+
+                {/* Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={keywordInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.includes(',')) {
+                        const parts = val.split(',');
+                        parts.forEach((p) => {
+                          if (p.trim()) handleAddKeyword(p);
+                        });
+                        setKeywordInput('');
+                      } else {
+                        setKeywordInput(val);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (keywordInput.trim()) {
+                          handleAddKeyword(keywordInput);
+                        }
+                      }
+                    }}
+                    placeholder="Type keyword & press Enter or comma (e.g. reels bundle, canva templates)..."
+                    className="flex-1 bg-white border border-blue-200 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (keywordInput.trim()) {
+                        handleAddKeyword(keywordInput);
+                      }
+                    }}
+                    className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-mono font-bold text-xs transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+
+                {/* Active Keywords Tags */}
+                {editingProduct.metaKeywords && editingProduct.metaKeywords.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {editingProduct.metaKeywords.map((kw, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-white text-blue-700 border border-blue-200 font-medium shadow-2xs group"
+                      >
+                        <span>#{kw}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveKeyword(kw)}
+                          className="text-slate-400 hover:text-rose-600 rounded p-0.5 transition-colors cursor-pointer"
+                          title="Remove keyword"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recommended SEO Suggestions */}
+                <div className="pt-1">
+                  <div className="text-[10px] font-mono font-bold uppercase text-slate-400 mb-1.5 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-500" />
+                    <span>Quick-Add Recommended SEO Keywords:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {SUGGESTED_META_KEYWORDS.filter(
+                      (sk) => !editingProduct.metaKeywords?.includes(sk)
+                    )
+                      .slice(0, 8)
+                      .map((sk) => (
+                        <button
+                          key={sk}
+                          type="button"
+                          onClick={() => handleAddKeyword(sk)}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded bg-white hover:bg-blue-100/70 text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus className="w-2.5 h-2.5 text-blue-500" />
+                          <span>{sk}</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
               </div>
 
               {/* Badges Selector */}

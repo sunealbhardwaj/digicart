@@ -96,6 +96,7 @@ export async function ensureTablesExist(): Promise<boolean> {
           \`sales_count\` INT DEFAULT 500,
           \`mockup_theme\` VARCHAR(50) DEFAULT 'amber',
           \`image_url\` TEXT DEFAULT NULL,
+          \`meta_keywords\` TEXT DEFAULT NULL,
           \`is_featured\` TINYINT(1) DEFAULT 0,
           \`is_active\` TINYINT(1) DEFAULT 1,
           \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -141,6 +142,13 @@ export async function ensureTablesExist(): Promise<boolean> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
 
+      // Ensure meta_keywords column exists on existing products table
+      try {
+        await conn.query('ALTER TABLE `products` ADD COLUMN `meta_keywords` TEXT DEFAULT NULL');
+      } catch {
+        // column already exists
+      }
+
       // Check if products table is empty, seed if empty
       const [rows]: [any[], any] = await conn.query('SELECT COUNT(*) as cnt FROM `products`');
       if (rows && rows[0] && rows[0].cnt === 0) {
@@ -149,8 +157,8 @@ export async function ensureTablesExist(): Promise<boolean> {
             `INSERT IGNORE INTO \`products\` (
               id, name, slug, category, description, features, regular_price, sale_price, badges,
               delivery_link, file_size, file_format, rating, review_count, sales_count,
-              mockup_theme, image_url, is_featured, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              mockup_theme, image_url, is_featured, is_active, meta_keywords
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               prod.id,
               prod.name,
@@ -171,6 +179,7 @@ export async function ensureTablesExist(): Promise<boolean> {
               prod.imageUrl || '',
               prod.isFeatured ? 1 : 0,
               prod.isActive ? 1 : 0,
+              JSON.stringify(prod.metaKeywords || []),
             ]
           );
         }
@@ -299,6 +308,7 @@ export async function getDbProducts(): Promise<Product[] | null> {
     return rows.map((r) => {
       let features: string[] = [];
       let badges: string[] = [];
+      let metaKeywords: string[] = [];
       try {
         features = typeof r.features === 'string' ? JSON.parse(r.features) : r.features || [];
       } catch {
@@ -308,6 +318,19 @@ export async function getDbProducts(): Promise<Product[] | null> {
         badges = typeof r.badges === 'string' ? JSON.parse(r.badges) : r.badges || [];
       } catch {
         badges = r.badges ? r.badges.split(',') : [];
+      }
+      try {
+        metaKeywords =
+          typeof r.meta_keywords === 'string'
+            ? JSON.parse(r.meta_keywords)
+            : r.meta_keywords || [];
+      } catch {
+        metaKeywords = r.meta_keywords
+          ? r.meta_keywords
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : [];
       }
 
       return {
@@ -328,6 +351,7 @@ export async function getDbProducts(): Promise<Product[] | null> {
         salesCount: Number(r.sales_count) || 200,
         mockupTheme: r.mockup_theme || 'amber',
         imageUrl: r.image_url || '',
+        metaKeywords: Array.isArray(metaKeywords) ? metaKeywords : [],
         isFeatured: Boolean(r.is_featured),
         isActive: Boolean(r.is_active),
         updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
@@ -350,8 +374,8 @@ export async function saveDbProduct(product: Product): Promise<boolean> {
       `INSERT INTO \`products\` (
         id, name, slug, category, description, features, regular_price, sale_price, badges,
         delivery_link, file_size, file_format, rating, review_count, sales_count,
-        mockup_theme, image_url, is_featured, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        mockup_theme, image_url, is_featured, is_active, meta_keywords
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         slug = VALUES(slug),
@@ -370,7 +394,8 @@ export async function saveDbProduct(product: Product): Promise<boolean> {
         mockup_theme = VALUES(mockup_theme),
         image_url = VALUES(image_url),
         is_featured = VALUES(is_featured),
-        is_active = VALUES(is_active)`,
+        is_active = VALUES(is_active),
+        meta_keywords = VALUES(meta_keywords)`,
       [
         product.id,
         product.name,
@@ -391,6 +416,7 @@ export async function saveDbProduct(product: Product): Promise<boolean> {
         product.imageUrl || '',
         product.isFeatured ? 1 : 0,
         product.isActive ? 1 : 0,
+        JSON.stringify(product.metaKeywords || []),
       ]
     );
     return true;

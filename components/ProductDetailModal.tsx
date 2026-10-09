@@ -16,6 +16,7 @@ import {
   Star,
   Sparkles,
   ExternalLink,
+  Tag,
 } from 'lucide-react';
 
 interface ProductDetailModalProps {
@@ -35,22 +36,42 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
   onBuyNow,
 }) => {
-  // Dynamically update page title & meta description while modal is open
+  // Dynamically update page title, meta description & meta keywords while modal is open
   useEffect(() => {
     if (!isOpen || !product) return;
     const prevTitle = document.title;
     const metaDescTag = document.querySelector('meta[name="description"]');
     const prevMetaDesc = metaDescTag ? metaDescTag.getAttribute('content') : '';
 
+    let metaKeywordsTag = document.querySelector('meta[name="keywords"]');
+    const createdKeywordsTag = !metaKeywordsTag;
+    const prevKeywords = metaKeywordsTag ? metaKeywordsTag.getAttribute('content') : '';
+
     document.title = buildProductTitle(product);
     if (metaDescTag) {
       metaDescTag.setAttribute('content', buildProductDescription(product));
+    }
+
+    if (product.metaKeywords && product.metaKeywords.length > 0) {
+      if (!metaKeywordsTag) {
+        metaKeywordsTag = document.createElement('meta');
+        metaKeywordsTag.setAttribute('name', 'keywords');
+        document.head.appendChild(metaKeywordsTag);
+      }
+      metaKeywordsTag.setAttribute('content', product.metaKeywords.join(', '));
     }
 
     return () => {
       document.title = prevTitle;
       if (metaDescTag && prevMetaDesc) {
         metaDescTag.setAttribute('content', prevMetaDesc);
+      }
+      if (metaKeywordsTag) {
+        if (createdKeywordsTag) {
+          metaKeywordsTag.remove();
+        } else if (prevKeywords) {
+          metaKeywordsTag.setAttribute('content', prevKeywords);
+        }
       }
     };
   }, [isOpen, product]);
@@ -233,6 +254,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     ))}
                   </ul>
                 </div>
+
+                {/* Custom Meta Keywords / Discoverability Tags */}
+                {product.metaKeywords && product.metaKeywords.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      <Tag className="w-3 h-3 text-blue-600" />
+                      <span>Search & Discoverability Keywords</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {product.metaKeywords.map((kw, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
+                        >
+                          #{kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Purchase Footer */}

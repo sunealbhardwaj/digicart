@@ -118,6 +118,7 @@ export interface Product {
   salesCount: number;   // e.g. 1820
   mockupTheme: 'obsidian' | 'emerald' | 'amber' | 'cyan' | 'purple' | 'rose';
   imageUrl?: string;    // Custom image URL if provided
+  metaKeywords?: string[]; // Custom meta keywords for SEO & discoverability
   isFeatured?: boolean;
   isActive: boolean;
   updatedAt: string;

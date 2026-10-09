@@ -35,7 +35,8 @@ export async function GET(req: NextRequest) {
       (p) =>
         p.name.toLowerCase().includes(search) ||
         p.description.toLowerCase().includes(search) ||
-        p.features.some((f) => f.toLowerCase().includes(search))
+        p.features.some((f) => f.toLowerCase().includes(search)) ||
+        (p.metaKeywords && p.metaKeywords.some((k) => k.toLowerCase().includes(search)))
     );
   }
 

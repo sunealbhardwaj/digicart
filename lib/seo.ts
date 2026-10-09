@@ -66,11 +66,23 @@ export function buildProductMetadata(product: Product, baseUrl?: string): Metada
     : undefined;
   const imageUrl = product.imageUrl || 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=1200&h=630&q=80';
 
+  const keywords =
+    product.metaKeywords && product.metaKeywords.length > 0
+      ? product.metaKeywords
+      : [
+          product.category,
+          'digital products',
+          'creator assets',
+          'instant download',
+          'commercial license',
+        ];
+
   return {
     title: {
       absolute: title,
     },
     description,
+    keywords,
     alternates: canonicalUrl ? { canonical: canonicalUrl } : undefined,
     openGraph: {
       title,
@@ -97,6 +109,7 @@ export function buildProductMetadata(product: Product, baseUrl?: string): Metada
       'product:price:amount': product.salePrice.toString(),
       'product:price:currency': 'INR',
       'product:category': product.category,
+      keywords: keywords.join(', '),
     },
   };
 }
@@ -107,6 +120,10 @@ export function buildProductMetadata(product: Product, baseUrl?: string): Metada
 export function buildProductJsonLd(product: Product, baseUrl?: string) {
   const url = baseUrl ? `${baseUrl}/product/${product.slug || product.id}` : '';
   const imageUrl = product.imageUrl || '';
+  const keywordsStr =
+    product.metaKeywords && product.metaKeywords.length > 0
+      ? product.metaKeywords.join(', ')
+      : undefined;
 
   return {
     '@context': 'https://schema.org',
@@ -115,6 +132,7 @@ export function buildProductJsonLd(product: Product, baseUrl?: string) {
     description: product.description,
     image: imageUrl ? [imageUrl] : [],
     category: product.category,
+    keywords: keywordsStr,
     offers: {
       '@type': 'Offer',
       price: product.salePrice,
